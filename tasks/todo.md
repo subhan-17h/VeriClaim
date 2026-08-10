@@ -38,7 +38,7 @@ so the C-1 ladder would have retried, fallen through to OpenAI, and **started bi
       `paid` on `ModelSpec` (**fails closed**); `VC_ALLOW_PAID_FALLBACK` (default `false`) makes
       the ladder refuse paid rungs; `VC_MAX_COST_USD_TOTAL=5.00` / `_PER_REQUEST=0.25` checked
       **before** each call. — `N`
-- [ ] **C-1.8** Free-tier rate limiter: `gateway/quota.py` token bucket over `rpm`/`rpd`; RPM
+- [x] **C-1.8** Free-tier rate limiter: `gateway/quota.py` token bucket over `rpm`/`rpd`; RPM
       overrun waits, RPD overrun raises `QuotaExhaustedError`; daily counters persist keyed by
       model + **US/Pacific** date so a restart cannot reset them. Self-throttling is what stops
       us generating the 429s that would walk the ladder toward a paid provider. — `N`

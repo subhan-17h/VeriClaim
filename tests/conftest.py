@@ -94,6 +94,21 @@ def routing() -> ModelRouting:
     )
 
 
+@pytest.fixture(autouse=True)
+def isolated_quota_state(tmp_path, monkeypatch):
+    """Keep every test's quota counters in its own temp file.
+
+    Without this, running the suite would consume the real free-tier daily allowance
+    recorded in .vericlaim_cache/quota.json and could refuse live calls afterwards.
+    """
+    from vericlaim.gateway import quota
+
+    monkeypatch.setenv("VC_QUOTA_STATE_PATH", str(tmp_path / "quota.json"))
+    quota.reset_default_limiter()
+    yield
+    quota.reset_default_limiter()
+
+
 @pytest.fixture
 def alpha(monkeypatch) -> ScriptedProvider:
     provider = ScriptedProvider(name="alpha")

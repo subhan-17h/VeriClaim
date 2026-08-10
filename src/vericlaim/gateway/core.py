@@ -31,6 +31,7 @@ from vericlaim.config import (
     get_settings,
 )
 from vericlaim.gateway.providers import get_provider
+from vericlaim.gateway.quota import RateLimiter, default_limiter
 from vericlaim.gateway.types import (
     BudgetExceededError,
     Completion,
@@ -112,9 +113,11 @@ class Gateway:
         ledger: UsageLedger | None = None,
         settings: Settings | None = None,
         session_ledger: UsageLedger | None = None,
+        limiter: RateLimiter | None = None,
     ) -> None:
         self._routing = routing or get_model_routing()
         self.settings = settings or get_settings()
+        self.limiter = limiter if limiter is not None else default_limiter()
         self.ledger = ledger if ledger is not None else UsageLedger()
         # The session ledger spans many requests, so the total ceiling bounds the
         # project rather than each question in isolation. Defaults to the process-wide
@@ -153,6 +156,9 @@ class Gateway:
         for attempt in range(self._routing.transient_retries + 1):
             attempts = attempt + 1
             try:
+                # Throttle per attempt, since every attempt is a real request against
+                # the provider's quota -- including retries.
+                self.limiter.acquire(spec)
                 raw = provider.complete(
                     spec,
                     messages,
