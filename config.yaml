@@ -21,14 +21,39 @@
 # generating the 429s that would push the ladder toward a paid provider. Limits apply
 # per PROJECT, not per API key, and reset at midnight US/Pacific.
 
+# MODEL AVAILABILITY (verified live 2026-08-11 against this project's key)
+# ------------------------------------------------------------------------
+# gemini-2.5-flash is listed by models.list() but returns 404 "no longer available to
+# new users" when called. Listing does not imply usability, so these names were chosen
+# by making a real call to each -- see scripts/verify_providers.py.
+# gemini-2.5-pro and gemini-pro-latest returned 429 immediately: the pro free-tier
+# allowance is far too small for this workload.
+#
+# THINKING TOKENS: Gemini 3.x models reason before answering, and those thoughts are
+# billed against max_output_tokens. A 16-token budget produced 128 thought tokens and
+# an EMPTY reply. The budgets below are deliberately generous for that reason. Setting
+# thinking_budget=0 works on 3.5-flash but is rejected by 3.6-flash and flash-lite, so
+# a generous budget is the portable fix rather than disabling thinking.
+#
+# PRICING: Gemini entries are priced at 0.0 because we are on the free tier and they
+# genuinely cost nothing. Pricing them at their paid-tier rates would consume the spend
+# ceiling that exists to protect a real prepaid OpenAI credit. Token counts are still
+# recorded per model and per task, so cost awareness is not lost. Published paid rates
+# are noted beside each entry for the write-up.
+#
+# RATE LIMITS: Google publishes limits for 2.5-series models; the 3.x figures are not
+# documented, so the conservative 2.5 numbers are reused. Guessing low only means we
+# throttle more than necessary, and the provider's own 429 remains the backstop.
+
 tiers:
   # High-volume classification and routing. flash-lite has by far the largest daily
-  # allowance (1000/day), which is what makes ~25-30 full questions/day possible.
+  # allowance, which is what makes ~25-30 full questions/day possible. Measured at
+  # ~700ms, the fastest of the candidates.
   cheap:
     provider: gemini
-    model: gemini-2.5-flash-lite
-    usd_per_1m_input: 0.10
-    usd_per_1m_output: 0.40
+    model: gemini-3.5-flash-lite
+    usd_per_1m_input: 0.0      # free tier (paid rate would be ~0.10)
+    usd_per_1m_output: 0.0     # free tier (paid rate would be ~0.40)
     paid: false
     rpm: 15
     rpd: 1000
@@ -38,39 +63,38 @@ tiers:
   # Structured generation where correctness matters but the task is well-scoped.
   mid:
     provider: gemini
-    model: gemini-2.5-flash
-    usd_per_1m_input: 0.30
-    usd_per_1m_output: 2.50
-    paid: false
-    rpm: 10
-    rpd: 250
-    timeout_s: 60
-    max_output_tokens: 4096
-
-  # Planning, cross-source reasoning, final synthesis. 2.5-pro would reason better but
-  # is capped at 100 requests/day, which would not survive an evaluation run.
-  strong:
-    provider: gemini
-    model: gemini-2.5-flash
-    usd_per_1m_input: 0.30
-    usd_per_1m_output: 2.50
+    model: gemini-3.5-flash
+    usd_per_1m_input: 0.0      # free tier (paid rate would be ~0.30)
+    usd_per_1m_output: 0.0     # free tier (paid rate would be ~2.50)
     paid: false
     rpm: 10
     rpd: 250
     timeout_s: 90
     max_output_tokens: 4096
 
-  # OCR escalation for scanned pages below the confidence floor. Gemini flash is
-  # vision-capable, so degraded-page recovery stays free.
-  vision:
+  # Planning, cross-source reasoning, final synthesis.
+  strong:
     provider: gemini
-    model: gemini-2.5-flash
-    usd_per_1m_input: 0.30
-    usd_per_1m_output: 2.50
+    model: gemini-3.5-flash
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
     paid: false
     rpm: 10
     rpd: 250
     timeout_s: 120
+    max_output_tokens: 8192
+
+  # OCR escalation for scanned pages below the confidence floor. Gemini flash is
+  # vision-capable, so degraded-page recovery stays free.
+  vision:
+    provider: gemini
+    model: gemini-3.5-flash
+    usd_per_1m_input: 0.0
+    usd_per_1m_output: 0.0
+    paid: false
+    rpm: 10
+    rpd: 250
+    timeout_s: 150
     max_output_tokens: 4096
 
 # Per-task tier assignment. Every gateway call names a task; an unknown task is an
@@ -98,25 +122,28 @@ tasks:
 # Fallback ladder. Free Gemini rungs come first; the paid OpenAI rung is last and is
 # skipped entirely unless VC_ALLOW_PAID_FALLBACK=true. Every hop is recorded on the
 # trace, including a hop that was refused.
+# Free Gemini rungs first; the paid OpenAI rung is last and is skipped entirely unless
+# VC_ALLOW_PAID_FALLBACK=true. gpt-4o-mini is the only paid model used anywhere, chosen
+# because it is the cheapest capable option against a $1.00 prepaid credit.
 fallback:
   cheap:
-    - {provider: gemini, model: gemini-2.5-flash, usd_per_1m_input: 0.30, usd_per_1m_output: 2.50,
-       paid: false, rpm: 10, rpd: 250}
+    - {provider: gemini, model: gemini-3.5-flash, usd_per_1m_input: 0.0, usd_per_1m_output: 0.0,
+       paid: false, rpm: 10, rpd: 250, max_output_tokens: 4096}
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
-       paid: true}
+       paid: true, max_output_tokens: 2048}
   mid:
-    - {provider: gemini, model: gemini-2.5-flash-lite, usd_per_1m_input: 0.10, usd_per_1m_output: 0.40,
-       paid: false, rpm: 15, rpd: 1000}
+    - {provider: gemini, model: gemini-3.5-flash-lite, usd_per_1m_input: 0.0, usd_per_1m_output: 0.0,
+       paid: false, rpm: 15, rpd: 1000, max_output_tokens: 4096}
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
-       paid: true}
+       paid: true, max_output_tokens: 4096}
   strong:
-    - {provider: gemini, model: gemini-2.5-flash-lite, usd_per_1m_input: 0.10, usd_per_1m_output: 0.40,
-       paid: false, rpm: 15, rpd: 1000}
+    - {provider: gemini, model: gemini-3.5-flash-lite, usd_per_1m_input: 0.0, usd_per_1m_output: 0.0,
+       paid: false, rpm: 15, rpd: 1000, max_output_tokens: 4096}
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
-       paid: true}
+       paid: true, max_output_tokens: 4096}
   vision:
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
-       paid: true}
+       paid: true, max_output_tokens: 4096}
 
 limits:
   # Transient-error retries against the SAME model before walking the fallback ladder.

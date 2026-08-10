@@ -187,12 +187,33 @@ class TestShippedRoutingTable:
             providers.update(spec.provider for spec in chain)
         assert len(providers) >= 2
 
-    def test_priced_tiers_have_nonzero_rates(self):
-        # A missing rate would silently under-report cost.
+    def test_billed_models_declare_their_rates(self):
+        # A paid model with no rate would silently under-report real spend. Free-tier
+        # models are legitimately priced at zero: charging them notional paid rates
+        # would consume the ceiling that protects an actual prepaid credit.
+        routing = load_model_routing(DEFAULT_ROUTING_PATH)
+        billed = [
+            spec
+            for spec in (*routing.tiers.values(), *sum(routing.fallbacks.values(), ()))
+            if spec.paid
+        ]
+        assert billed, "no billed model configured, so fallback cannot be demonstrated"
+        for spec in billed:
+            assert spec.usd_per_1m_input > 0, f"{spec.label} has no input rate"
+            assert spec.usd_per_1m_output > 0, f"{spec.label} has no output rate"
+
+    def test_free_tiers_are_priced_at_zero(self):
         routing = load_model_routing(DEFAULT_ROUTING_PATH)
         for name, spec in routing.tiers.items():
-            assert spec.usd_per_1m_input > 0, f"tier {name} has no input rate"
-            assert spec.usd_per_1m_output > 0, f"tier {name} has no output rate"
+            assert not spec.paid, f"tier {name} routes to a billed model"
+            assert spec.usd_per_1m_input == 0.0, f"tier {name} charges for a free model"
+
+    def test_output_budgets_leave_room_for_thinking_tokens(self):
+        # Gemini 3.x reasons before answering and bills those thoughts against
+        # max_output_tokens. A small budget yields an empty reply, not a short one.
+        routing = load_model_routing(DEFAULT_ROUTING_PATH)
+        for name, spec in routing.tiers.items():
+            assert spec.max_output_tokens >= 2048, f"tier {name} may starve on thinking"
 
     def test_vision_task_routes_to_a_vision_capable_tier(self):
         routing = load_model_routing(DEFAULT_ROUTING_PATH)

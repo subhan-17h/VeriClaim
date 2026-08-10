@@ -76,13 +76,31 @@ uv run python scripts/generate_corpus.py --seed 42   # build all four synthetic 
 ## Commands
 
 ```bash
-uv run pytest -v                                             # full test suite
+uv run pytest -v                                             # full test suite (no keys needed)
 uv run pytest -m "not ocr and not postgres and not ollama"   # offline-only
 uv run ruff check .                                          # lint
+uv run python scripts/verify_providers.py                    # check credentials (free)
+uv run python scripts/verify_providers.py --paid             # ... including one billed call
+uv run python scripts/spend.py                               # what has been spent so far
 uv run python scripts/smoke.py                               # prove the read-only role rejects DDL
 uv run python eval/run.py                                    # evaluation suite
 cd frontend && npm run build                                 # frontend build
 ```
+
+## Cost control
+
+The system runs on Gemini's free tier. Four independent layers make an unexpected bill
+impossible rather than unlikely:
+
+| Layer | Effect |
+|---|---|
+| Gemini serves every tier, priced at `0.0` | normal operation costs **$0.00** |
+| `VC_ALLOW_PAID_FALLBACK=false` (default) | the fallback ladder **refuses** billed rungs and raises, naming the flag |
+| Client-side rate limiter | self-throttles below the published RPM/RPD, so the 429 that would push the ladder toward a paid provider is never generated |
+| Persisted spend ceiling | `$0.02` per question, `$0.25` per process, `$0.50` lifetime — the lifetime figure survives restarts, so it bounds the project rather than resetting each run |
+
+`ModelSpec.paid` defaults to `True`, so a config entry that forgets the flag fails closed.
+Run `scripts/spend.py` at any time; `--reset` clears the record, deliberately never automatic.
 
 ## Safety properties
 

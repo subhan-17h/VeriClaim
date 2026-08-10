@@ -76,3 +76,45 @@ rule under test.
 
 **Rule:** When a component enforces several independent rules, give each rule its own
 fixture that leaves the others unbounded. A failing test should name the rule it broke.
+
+---
+
+## LESSON-6 — A model appearing in `models.list()` does not mean you can call it
+
+**Pattern:** `config.yaml` routed three of four tiers to `gemini-2.5-flash`, chosen from
+the published model list. Every call returned **404 "no longer available to new users"**.
+The model is listed by the API and documented on the web; it simply cannot be called with
+a newly issued key. `gemini-2.5-pro` was listed too and returned 429 immediately — its
+free allowance is far below this workload.
+
+**Rule:** Verify model names with a real call before routing anything to them, and keep
+that check runnable (`scripts/verify_providers.py`). Documentation and `models.list()` are
+both hints, not contracts. Record the verification date beside the config entry.
+
+---
+
+## LESSON-7 — Thinking tokens are billed against `max_output_tokens`
+
+**Pattern:** A smoke test capped `max_output_tokens` at 16 and every Gemini 3.x *flash*
+model returned an **empty string with zero output tokens**. It looked like a broken model
+or a bad request. In fact the model spent 128 tokens reasoning and had no budget left to
+answer: with 512 tokens the same call returned `'ok'` after 128 thought tokens.
+
+**Rule:** For reasoning models, `max_output_tokens` must cover thinking *plus* the answer.
+Budget generously — an empty reply is the failure mode, and it is silent. `thinking_budget=0`
+is not a portable escape: it works on `gemini-3.5-flash` but is rejected with 400 by
+`gemini-3.6-flash` and `gemini-3.5-flash-lite`.
+
+---
+
+## LESSON-8 — Secrets in `.env` must reach the code that reads `os.environ`
+
+**Pattern:** Keys were correctly placed in `.env` and `Settings` loaded them, but the
+provider adapters and the tracing wrapper read `os.environ` directly (deliberately, to keep
+secrets out of a settings object that gets logged and `repr`'d). Nothing bridged the two, so
+every key read as absent and every provider reported "not set".
+
+**Rule:** If any component reads `os.environ` for configuration, load `.env` into the real
+process environment once at import — `load_dotenv(..., override=False)` so a genuine
+environment variable still wins. Verify with a check that prints key *presence*, never the
+value.

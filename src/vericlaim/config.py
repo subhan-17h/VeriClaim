@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import yaml
+from dotenv import load_dotenv
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -32,6 +33,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 DEFAULT_ROUTING_PATH = PROJECT_ROOT / "config.yaml"
+
+# Populate the real process environment from .env, once, at import.
+#
+# pydantic-settings reads .env into Settings, but API keys are consumed straight from
+# os.environ by the provider adapters and the tracing wrapper -- keeping secrets out of
+# a settings object that gets logged and repr'd. Without this, keys placed in .env are
+# invisible to exactly the code that needs them.
+#
+# override=False so a real environment variable always beats the file, which is what
+# lets CI and one-off shell overrides work.
+load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 
 class Settings(BaseSettings):
