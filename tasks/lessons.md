@@ -48,3 +48,31 @@ CSRS:            M  eval/final/summary.csv          (mtime Jul 29)
 
 Anything beyond this list, or any mtime at or after 2026-08-10, means we wrote to a
 reference repo and must be reverted.
+
+---
+
+## LESSON-4 — A free tier is only free if exhaustion cannot fall through to a paid one
+
+**Pattern:** Gemini reports free-tier exhaustion as HTTP 429, which is a genuinely
+transient error. The gateway retried it, gave up on the rung, and walked the fallback
+ladder — straight onto a billed OpenAI model. Routine quota exhaustion would have
+silently become spend, with nothing in the logs marking the transition.
+
+**Rule:** When mixing free and paid providers, cost must be a property of the routing
+table, not of the error path. Mark every model `paid`, default that flag to `True` so a
+forgotten entry fails closed, and require an explicit opt-in before any ladder may reach
+a billed rung. Then throttle client-side against the published limits so the 429 that
+starts the chain is never generated. Two defaults for one field — `False` on the
+dataclass, `True` in the loader, as originally written — is exactly the inconsistency
+that produces a surprise bill.
+
+---
+
+## LESSON-5 — One fixture must not exercise two independent limits
+
+**Pattern:** A test model was given both `rpm=2` and `rpd=3`. The daily-limit tests then
+tripped the *minute* limit while still setting up, so the failure said nothing about the
+rule under test.
+
+**Rule:** When a component enforces several independent rules, give each rule its own
+fixture that leaves the others unbounded. A failing test should name the rule it broke.

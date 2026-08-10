@@ -55,7 +55,7 @@ names `VC_ALLOW_PAID_FALLBACK`; flag on → hop taken and priced; loop past the 
 - [x] **C-2.3** Citation contract — `resolve_citations`; an unresolvable marker is a hard failure. — `N`
 
 **Acceptance:** mixed-source set serializes and every marker resolves; `[E9]` against a 4-item set
-fails loudly.
+fails loudly. — **MET**, see review below.
 
 ## Phase C-3 — Policy RAG (source 1)
 
@@ -229,3 +229,48 @@ acceptance script demonstrated all four required properties against faked provid
 expose cost and fallback events over the API — neither reference repo exposed its trace at all.
 
 **No lessons recorded.** No user corrections during this phase.
+
+### Phase C-1 addendum — closed (C-1.7, C-1.8)
+
+**Why.** Verified free-tier facts invalidated part of what C-1 shipped. Gemini's quotas were
+cut 50–80% in Dec 2025, and exhaustion arrives as HTTP 429 — a genuinely transient error — so
+the shipped ladder would have retried, fallen through to OpenAI, and **started billing with no
+signal**. See [lessons.md](lessons.md) LESSON-4.
+
+**Evidence.** `pytest -q` → **155 passed**; ruff clean. Acceptance runs showed:
+
+| Property | Result |
+|---|---|
+| Free tier exhausted, flag off | paid provider contacted **0 times**, **$0.00** spent, error names `VC_ALLOW_PAID_FALLBACK` |
+| Same run, flag on | answered by `openai/gpt-4o-mini`, 2 hops recorded, priced |
+| Spend ceiling | halted at `$0.62` against a `$0.50` cap, bounded *before* the breaching call |
+| RPM overrun | 11th call in a minute waited 60 s — **no 429 generated** |
+| RPD overrun | refused without sleeping; counters survived a restart; rolled over on the **US/Pacific** boundary |
+
+`ModelSpec.paid` defaults to `True` so a config entry that forgets the flag fails closed.
+
+### Phase C-2 — closed
+
+**Delivered.** `Evidence` + four typed locators, `EvidenceSet` with stable ids, and
+deterministic `[En]` citation resolution. Zero API cost — pure data structures and regex.
+
+**Evidence.** `pytest -q` → **270 passed**; ruff clean. The acceptance run built a five-item
+set spanning all four sources and showed: locator/`source_type` mismatch refused at
+construction; the synthesis view tagging every block and marking a 0.38-confidence OCR page
+*"⚠ LOW CONFIDENCE — qualify, do not assert"*; a well-cited answer at **precision 1.00 /
+coverage 1.00**; and a fabricated `[E9]` raising `UnresolvableCitationError` naming the
+available ids.
+
+**Decisions worth defending.**
+
+- *Locator type checked at construction.* A tool cannot emit evidence nothing can cite,
+  because such an object cannot be built.
+- *Executed SQL withheld from the synthesis view.* It belongs in the citation and the UI;
+  in the prompt it would spend tokens and invite reasoning about the query, not the result.
+- *Empty set renders "No evidence was retrieved."* The synthesizer must distinguish that
+  from a missing evidence block — opposite correct responses.
+- *Under-citing measured, not fatal.* Existing citations still resolve, so it is a
+  completeness concern for sufficiency, feeding cross-source scoring in C-11.
+
+**Carried forward.** `render_for_synthesis` is the boundary C-7.8 must call and nothing else;
+`resolve_citations` is what C-7.9 checks and what C-11's precision/recall scorers reuse.
