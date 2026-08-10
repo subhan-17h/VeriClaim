@@ -23,7 +23,7 @@ implementation plan and [docs/superpowers/specs/2026-08-10-vericlaim-design.md](
       `response.usage` → tokens, cost, latency per call. — `N`
 - [x] **C-1.5** `gateway/fallback.py` — transient retry → alternate model → alternate provider →
       structured degradation; fallback events recorded. — `N`
-- [ ] **C-1.6** `tracing.py` — `@traced` over LangSmith `@traceable`, no-op when unconfigured. — `N`
+- [x] **C-1.6** `tracing.py` — `@traced` over LangSmith `@traceable`, no-op when unconfigured. — `N`
 
 **Acceptance:** `uv run pytest tests/gateway -v` green; mocked call proves per-tier model choice, a
 recorded cost figure, and cross-provider fallback on hard failure.

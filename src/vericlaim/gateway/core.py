@@ -34,6 +34,7 @@ from vericlaim.gateway.types import (
     TransientProviderError,
     UsageLedger,
 )
+from vericlaim.tracing import trace_completion
 
 
 def _coerce_messages(messages: str | list[Message] | list[dict[str, Any]]) -> list[Message]:
@@ -158,7 +159,7 @@ class Gateway:
         completion = self._run(
             task, _coerce_messages(messages), temperature=temperature
         )
-        return self.ledger.record(completion)
+        return self._finish(completion)
 
     def complete_json(
         self,
@@ -180,7 +181,7 @@ class Gateway:
             json_schema=schema,
         )
         parsed = _parse_json(completion.text, task=task)
-        return self.ledger.record(self._replace_parsed(completion, parsed))
+        return self._finish(self._replace_parsed(completion, parsed))
 
     def complete_vision(
         self,
@@ -197,9 +198,9 @@ class Gateway:
             task, messages, temperature=temperature, json_schema=schema
         )
         if schema is None:
-            return self.ledger.record(completion)
+            return self._finish(completion)
         parsed = _parse_json(completion.text, task=task)
-        return self.ledger.record(self._replace_parsed(completion, parsed))
+        return self._finish(self._replace_parsed(completion, parsed))
 
     # --------------------------------------------------------------------- internals
 
@@ -225,6 +226,16 @@ class Gateway:
             temperature=temperature,
             json_schema=json_schema,
         )
+
+    def _finish(self, completion: Completion) -> Completion:
+        """Record a completed call to the ledger and annotate the active trace span.
+
+        One place so that ledger and trace can never disagree about what was billed.
+        Tracing failures are swallowed inside trace_completion: annotating a trace
+        must never break the call it is describing.
+        """
+        trace_completion(completion)
+        return self.ledger.record(completion)
 
     @staticmethod
     def _replace_parsed(completion: Completion, parsed: Any) -> Completion:
