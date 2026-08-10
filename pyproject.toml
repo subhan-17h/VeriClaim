@@ -1,0 +1,84 @@
+[project]
+name = "vericlaim"
+version = "0.1.0"
+description = "VeriClaim - Evidence-Grounded Insurance Claims Intelligence Agent"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    # --- orchestration + tracing ---
+    "langgraph>=0.2.60",
+    "langsmith>=0.2.0",
+    # --- model gateway ---
+    "openai>=2.44.0",
+    "google-genai>=1.0.0",
+    # --- policy RAG + scanned OCR ---
+    # docling pins the <3.13 python floor and pulls torch/opencv/rapidocr.
+    # scripts/warm_models.py fetches its weights (layout, tableformer, OCR) before runtime.
+    "docling>=2.114.0",
+    "chromadb>=1.5.9",
+    "bm25s>=0.3.9",
+    "PyStemmer>=2.2.0.1",
+    "flashrank>=0.2.10",
+    "pypdf>=5.1.0",
+    "pdfplumber>=0.11.4",
+    "ollama>=0.4.7",
+    # --- SQL + spreadsheets ---
+    # sqlglot is PINNED EXACTLY: sql/validator.py depends on optimizer internals
+    # (traverse_scope, qualify, scope.external_columns, scope.selected_sources).
+    # An unpinned bump can break the SQL safety layer with no test failure.
+    "sqlglot==30.12.0",
+    "psycopg[binary,pool]>=3.3.4",
+    "pandas>=3.0.3",
+    "openpyxl>=3.1.5",
+    # --- api + config ---
+    "fastapi>=0.139.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "PyYAML>=6.0.2",
+    "python-dotenv>=1.0.1",
+]
+
+[project.scripts]
+vericlaim-api = "vericlaim.api.app:main"
+vericlaim = "vericlaim.cli:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+]
+corpus = [
+    # synthetic corpus generation: clean PDFs -> rasterized image-only scans
+    "reportlab>=4.2.0",
+    "pypdfium2>=4.30.0",
+    "Pillow>=11.0.0",
+    "Faker>=30.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vericlaim"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests", "scripts", "eval"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "eval", "scripts"]
+markers = [
+    "docling: needs Docling layout/table weights (deselect with -m 'not docling')",
+    "ocr: needs Docling OCR weights + RapidOCR (deselect with -m 'not ocr')",
+    "ollama: needs a running Ollama server (deselect with -m 'not ollama')",
+    "flashrank: needs FlashRank ONNX weights (deselect with -m 'not flashrank')",
+    "postgres: needs the docker-compose Postgres on 5435 (deselect with -m 'not postgres')",
+    "live_llm: needs real provider API keys (deselect with -m 'not live_llm')",
+]

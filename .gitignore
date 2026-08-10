@@ -1,0 +1,39 @@
+# --- secrets ---
+.env
+*.key
+*-service-account.json
+
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- frontend ---
+frontend/node_modules/
+frontend/dist/
+
+# --- generated data stores (rebuildable via scripts/) ---
+chroma_db/
+bm25_index/
+.vericlaim_cache/
+
+# --- generated synthetic corpus (reproducible via scripts/generate_corpus.py --seed) ---
+data/policies/
+data/scanned/
+data/spreadsheets/
+data/corpus_manifest.json
+
+# --- evaluation output ---
+eval/results/
+eval/reports/
+eval/.judge_cache/
+
+# --- model weights ---
+models/
+
+# --- os ---
+.DS_Store
