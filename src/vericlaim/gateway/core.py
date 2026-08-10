@@ -32,6 +32,7 @@ from vericlaim.config import (
 )
 from vericlaim.gateway.providers import get_provider
 from vericlaim.gateway.quota import RateLimiter, default_limiter
+from vericlaim.gateway.spend import PersistentSpend, default_spend
 from vericlaim.gateway.types import (
     BudgetExceededError,
     Completion,
@@ -114,10 +115,12 @@ class Gateway:
         settings: Settings | None = None,
         session_ledger: UsageLedger | None = None,
         limiter: RateLimiter | None = None,
+        spend: PersistentSpend | None = None,
     ) -> None:
         self._routing = routing or get_model_routing()
         self.settings = settings or get_settings()
         self.limiter = limiter if limiter is not None else default_limiter()
+        self.spend = spend if spend is not None else default_spend()
         self.ledger = ledger if ledger is not None else UsageLedger()
         # The session ledger spans many requests, so the total ceiling bounds the
         # project rather than each question in isolation. Defaults to the process-wide
@@ -285,6 +288,9 @@ class Gateway:
             raise BudgetExceededError(
                 "Session", self.session_ledger.total_cost_usd, total
             )
+        # The only ceiling that survives a restart, and therefore the only one that
+        # genuinely bounds a fixed prepaid credit.
+        self.spend.check(self.settings.max_cost_usd_lifetime)
 
     def _finish(self, completion: Completion) -> Completion:
         """Record a completed call to the ledger and annotate the active trace span.
@@ -294,10 +300,16 @@ class Gateway:
         must never break the call it is describing.
         """
         trace_completion(completion)
-        # Recorded to both: the request ledger drives the per-question figure the API
-        # reports, the session ledger enforces the project-wide ceiling.
+        # Recorded in three places, each answering a different question: the request
+        # ledger drives the per-question figure the API reports, the session ledger
+        # bounds this process, and the persistent record bounds the prepaid credit.
         if self.session_ledger is not self.ledger:
             self.session_ledger.record(completion)
+        self.spend.record(
+            model_label=f"{completion.provider}/{completion.model}",
+            usd=completion.cost_usd,
+            tokens=completion.usage.total_tokens,
+        )
         return self.ledger.record(completion)
 
     @staticmethod

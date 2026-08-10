@@ -101,12 +101,15 @@ def isolated_quota_state(tmp_path, monkeypatch):
     Without this, running the suite would consume the real free-tier daily allowance
     recorded in .vericlaim_cache/quota.json and could refuse live calls afterwards.
     """
-    from vericlaim.gateway import quota
+    from vericlaim.gateway import quota, spend
 
     monkeypatch.setenv("VC_QUOTA_STATE_PATH", str(tmp_path / "quota.json"))
+    monkeypatch.setenv("VC_SPEND_STATE_PATH", str(tmp_path / "spend.json"))
     quota.reset_default_limiter()
+    spend.reset_default_spend()
     yield
     quota.reset_default_limiter()
+    spend.reset_default_spend()
 
 
 @pytest.fixture

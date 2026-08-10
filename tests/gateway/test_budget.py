@@ -301,5 +301,11 @@ class TestShippedConfigIsFree:
 
     def test_default_settings_block_paid_use(self):
         assert Settings().allow_paid_fallback is False
-        assert Settings().max_cost_usd_total == 5.00
-        assert Settings().max_cost_usd_per_request == 0.25
+
+    def test_default_ceilings_are_nested_and_fit_the_prepaid_credit(self):
+        # Sized for a $1.00 OpenAI credit. The three ceilings nest so that no single
+        # question, and no single process, can consume the whole allowance.
+        settings = Settings()
+        assert settings.max_cost_usd_lifetime <= 0.50
+        assert settings.max_cost_usd_per_request < settings.max_cost_usd_total
+        assert settings.max_cost_usd_total < settings.max_cost_usd_lifetime

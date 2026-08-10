@@ -129,10 +129,19 @@ class Settings(BaseSettings):
     # config.yaml and the ladder refuses them unless this is turned on. Flip it
     # deliberately for a demo or a paid evaluation run.
     allow_paid_fallback: bool = False
-    # Hard ceilings checked before each call, against the request's UsageLedger.
-    # The per-request cap also catches a pathological retry loop inside one question.
-    max_cost_usd_total: float = 5.00
-    max_cost_usd_per_request: float = 0.25
+    # Ceilings checked BEFORE each call.
+    #
+    # Sized for a $1.00 prepaid OpenAI credit, deliberately well under it. The lifetime
+    # figure is the one that matters: it is measured against a total persisted to disk,
+    # so it bounds the project rather than resetting to zero on every process start.
+    # A budget you can clear by restarting is a suggestion, not a ceiling.
+    max_cost_usd_lifetime: float = 0.50
+    # Bounds one process. Kept below the lifetime cap so a single runaway run cannot
+    # consume the whole allowance.
+    max_cost_usd_total: float = 0.25
+    # Bounds one question, which is what catches a pathological retry or replan loop.
+    max_cost_usd_per_request: float = 0.02
+    spend_state_path: Path = PROJECT_ROOT / ".vericlaim_cache" / "spend.json"
     # Client-side throttling so we never generate the 429s that would otherwise walk
     # the ladder toward a paid provider.
     enforce_rate_limits: bool = True
