@@ -15,7 +15,7 @@ implementation plan and [docs/superpowers/specs/2026-08-10-vericlaim-design.md](
 
 - [x] **C-1.1** Repo scaffold: git init, `.gitignore`, pinned `pyproject.toml`, `uv sync`, CLAUDE.md
       rewritten for VeriClaim, `tasks/`, design doc. — `N`
-- [ ] **C-1.2** `config.py` — pydantic-settings `Settings` (`VC_` prefix) + `config.yaml` per-task
+- [x] **C-1.2** `config.py` — pydantic-settings `Settings` (`VC_` prefix) + `config.yaml` per-task
       model routing. — `V` CSRS `config.py:20-107`, `A` unibot `config.yaml` routing idea
 - [ ] **C-1.3** `gateway/providers.py` — OpenAI + Gemini adapters behind one protocol, module-cached
       clients, explicit timeouts. — `A` unibot `llm.py` signature only

@@ -1,0 +1,86 @@
+# VeriClaim model routing.
+#
+# Tasks are routed to TIERS, not to models. This keeps the "which model does what"
+# decision in one table instead of scattered across the codebase, and makes swapping
+# a provider a one-line change.
+#
+# Cost is data, not code: usd_per_1m_input/output drive the gateway's cost accounting.
+# Update these when provider pricing changes. Set them to 0.0 for free/local models.
+
+tiers:
+  # Cheap + fast: classification and routing, where the task is easy and volume is high.
+  cheap:
+    provider: gemini
+    model: gemini-2.0-flash
+    usd_per_1m_input: 0.10
+    usd_per_1m_output: 0.40
+    timeout_s: 30
+    max_output_tokens: 2048
+
+  # Mid: structured generation where correctness matters but the task is well-scoped.
+  mid:
+    provider: openai
+    model: gpt-4o-mini
+    usd_per_1m_input: 0.15
+    usd_per_1m_output: 0.60
+    timeout_s: 60
+    max_output_tokens: 4096
+
+  # Strong: planning, cross-source reasoning, final synthesis.
+  strong:
+    provider: openai
+    model: gpt-4o
+    usd_per_1m_input: 2.50
+    usd_per_1m_output: 10.00
+    timeout_s: 90
+    max_output_tokens: 4096
+
+  # Vision: OCR escalation for scanned pages below the confidence floor.
+  vision:
+    provider: openai
+    model: gpt-4o
+    usd_per_1m_input: 2.50
+    usd_per_1m_output: 10.00
+    timeout_s: 120
+    max_output_tokens: 4096
+
+# Per-task tier assignment. Every gateway call names a task; an unknown task is an
+# error, not a silent default, so a typo cannot quietly bill the strong tier.
+tasks:
+  # --- orchestrator ---
+  understand: cheap
+  route: cheap
+  plan: strong
+  sufficiency: mid
+  synthesize: strong
+  verify: strong
+  # --- nl2sql subsystem ---
+  sql_table_select: cheap
+  sql_generator: mid
+  sql_refiner: mid
+  sql_unit_tester: mid
+  sql_profiler: strong
+  # --- documents ---
+  query_rewrite: cheap
+  ocr_vision: vision
+  # --- evaluation (supplementary judge only) ---
+  eval_judge: strong
+
+# Fallback ladder. On a hard failure the gateway walks this list in order, and each
+# hop is recorded on the trace. Cross-provider hops are what make fallback real rather
+# than a same-provider retry wearing a different hat.
+fallback:
+  cheap:
+    - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60}
+  mid:
+    - {provider: gemini, model: gemini-2.0-flash, usd_per_1m_input: 0.10, usd_per_1m_output: 0.40}
+  strong:
+    - {provider: gemini, model: gemini-2.5-pro, usd_per_1m_input: 1.25, usd_per_1m_output: 10.00}
+    - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60}
+  vision:
+    - {provider: gemini, model: gemini-2.0-flash, usd_per_1m_input: 0.10, usd_per_1m_output: 0.40}
+
+limits:
+  # Transient-error retries against the SAME model before walking the fallback ladder.
+  transient_retries: 2
+  transient_backoff_s: 1.0
