@@ -26,7 +26,7 @@ implementation plan and [docs/superpowers/specs/2026-08-10-vericlaim-design.md](
 - [x] **C-1.6** `tracing.py` — `@traced` over LangSmith `@traceable`, no-op when unconfigured. — `N`
 
 **Acceptance:** `uv run pytest tests/gateway -v` green; mocked call proves per-tier model choice, a
-recorded cost figure, and cross-provider fallback on hard failure.
+recorded cost figure, and cross-provider fallback on hard failure. — **MET**, see review below.
 
 ## Phase C-2 — The Evidence spine
 
@@ -176,4 +176,37 @@ invokes exactly one tool; out-of-scope refuses with zero tool calls.
 
 ## Review
 
-_Populated as phases close._
+### Phase C-1 — closed
+
+**Delivered.** Repo scaffold with exactly pinned dependencies; typed settings plus a
+task-to-model routing table; OpenAI and Gemini adapters behind one protocol; a gateway that
+routes, retries, prices, and parses; a cross-provider fallback ladder; and LangSmith tracing
+that is a genuine no-op when unconfigured.
+
+**Evidence.** `uv run pytest tests -q` → **117 passed**; `uv run ruff check .` → clean. The
+acceptance script demonstrated all four required properties against faked providers:
+
+| Property | Result |
+|---|---|
+| Per-tier routing | `route`→gemini/flash, `sql_generator`→openai/4o-mini, `synthesize`→openai/4o |
+| Cost accounting | 3 calls, 4500 tokens, **$0.006600**, with a per-task breakdown |
+| Cross-provider fallback | primary outage → answered by `gemini/gemini-2.5-pro`, hop recorded, **charged at the model that answered** |
+| Exhaustion | `AllProvidersFailedError` naming all 3 rungs; **0 calls billed** |
+| Tracing off | `@traced` returns normally; langsmith never imported |
+
+**Decisions that departed from the reference repos, and why.**
+
+- *Unrouted task raises rather than defaults.* A typo must not silently bill the strong tier
+  or downgrade a task that needs it.
+- *Routing validated on load.* unibot would have surfaced a bad tier reference only the first
+  time that path ran.
+- *Config cached once per process.* unibot re-read `config.yaml` and `.env` from disk on every
+  LLM call and every DB connection.
+- *Failed calls are never recorded.* A ledger counting attempts nobody received would overstate
+  spend; cost is charged at the model that actually answered.
+- *Dead config not carried over.* CSRS declares `refusal_threshold` and never reads it.
+
+**Carried forward.** `Gateway.with_fallbacks` and `UsageLedger` are the seam C-9.3 will use to
+expose cost and fallback events over the API — neither reference repo exposed its trace at all.
+
+**No lessons recorded.** No user corrections during this phase.

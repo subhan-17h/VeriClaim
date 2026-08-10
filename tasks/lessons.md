@@ -32,4 +32,19 @@ commit comes after the demonstration, not before — committing unverified work 
 it out first.
 
 **Rule:** Copy out, then adapt here. Before claiming completion,
-`git -C <ref-repo> status --porcelain` must be empty for both repos.
+`git -C <ref-repo> status --porcelain` must show **no change from the baseline below**.
+
+**Baseline (recorded 2026-08-10, before any VeriClaim work).** Neither repo was clean to
+begin with, so "must be empty" is not the right check — these entries pre-date this project
+and must be left exactly as they are:
+
+```
+unibot-endgame:  ?? cv_project_description.txt      (mtime Jul 13)
+                 ?? cv_refinements.md               (mtime Jul 13)
+CSRS:            M  eval/final/summary.csv          (mtime Jul 29)
+                 ?? RAG_Evaluation_Report.pdf       (mtime Jul 29)
+                 ?? results.md                      (mtime Jul 29)
+```
+
+Anything beyond this list, or any mtime at or after 2026-08-10, means we wrote to a
+reference repo and must be reverted.
