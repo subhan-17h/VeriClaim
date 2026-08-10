@@ -5,42 +5,71 @@
 # a provider a one-line change.
 #
 # Cost is data, not code: usd_per_1m_input/output drive the gateway's cost accounting.
-# Update these when provider pricing changes. Set them to 0.0 for free/local models.
+#
+# COST POLICY (2026-08-11)
+# -----------------------
+# Gemini serves every tier on its free tier. OpenAI is registered as a fallback leg
+# but every OpenAI entry is marked `paid: true`, and the ladder refuses paid rungs
+# unless VC_ALLOW_PAID_FALLBACK=true. Normal operation therefore costs $0.00.
+#
+# This matters because Gemini signals free-tier exhaustion with HTTP 429, which is a
+# legitimately transient error. Without the paid flag, exhausting the free quota would
+# retry, fall through to OpenAI, and quietly start billing.
+#
+# rpm/rpd are Google's published free-tier limits (reduced 50-80% in Dec 2025). They
+# are enforced client-side by gateway/quota.py so we self-throttle rather than
+# generating the 429s that would push the ladder toward a paid provider. Limits apply
+# per PROJECT, not per API key, and reset at midnight US/Pacific.
 
 tiers:
-  # Cheap + fast: classification and routing, where the task is easy and volume is high.
+  # High-volume classification and routing. flash-lite has by far the largest daily
+  # allowance (1000/day), which is what makes ~25-30 full questions/day possible.
   cheap:
     provider: gemini
-    model: gemini-2.0-flash
+    model: gemini-2.5-flash-lite
     usd_per_1m_input: 0.10
     usd_per_1m_output: 0.40
+    paid: false
+    rpm: 15
+    rpd: 1000
     timeout_s: 30
     max_output_tokens: 2048
 
-  # Mid: structured generation where correctness matters but the task is well-scoped.
+  # Structured generation where correctness matters but the task is well-scoped.
   mid:
-    provider: openai
-    model: gpt-4o-mini
-    usd_per_1m_input: 0.15
-    usd_per_1m_output: 0.60
+    provider: gemini
+    model: gemini-2.5-flash
+    usd_per_1m_input: 0.30
+    usd_per_1m_output: 2.50
+    paid: false
+    rpm: 10
+    rpd: 250
     timeout_s: 60
     max_output_tokens: 4096
 
-  # Strong: planning, cross-source reasoning, final synthesis.
+  # Planning, cross-source reasoning, final synthesis. 2.5-pro would reason better but
+  # is capped at 100 requests/day, which would not survive an evaluation run.
   strong:
-    provider: openai
-    model: gpt-4o
-    usd_per_1m_input: 2.50
-    usd_per_1m_output: 10.00
+    provider: gemini
+    model: gemini-2.5-flash
+    usd_per_1m_input: 0.30
+    usd_per_1m_output: 2.50
+    paid: false
+    rpm: 10
+    rpd: 250
     timeout_s: 90
     max_output_tokens: 4096
 
-  # Vision: OCR escalation for scanned pages below the confidence floor.
+  # OCR escalation for scanned pages below the confidence floor. Gemini flash is
+  # vision-capable, so degraded-page recovery stays free.
   vision:
-    provider: openai
-    model: gpt-4o
-    usd_per_1m_input: 2.50
-    usd_per_1m_output: 10.00
+    provider: gemini
+    model: gemini-2.5-flash
+    usd_per_1m_input: 0.30
+    usd_per_1m_output: 2.50
+    paid: false
+    rpm: 10
+    rpd: 250
     timeout_s: 120
     max_output_tokens: 4096
 
@@ -66,19 +95,28 @@ tasks:
   # --- evaluation (supplementary judge only) ---
   eval_judge: strong
 
-# Fallback ladder. On a hard failure the gateway walks this list in order, and each
-# hop is recorded on the trace. Cross-provider hops are what make fallback real rather
-# than a same-provider retry wearing a different hat.
+# Fallback ladder. Free Gemini rungs come first; the paid OpenAI rung is last and is
+# skipped entirely unless VC_ALLOW_PAID_FALLBACK=true. Every hop is recorded on the
+# trace, including a hop that was refused.
 fallback:
   cheap:
-    - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60}
+    - {provider: gemini, model: gemini-2.5-flash, usd_per_1m_input: 0.30, usd_per_1m_output: 2.50,
+       paid: false, rpm: 10, rpd: 250}
+    - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
+       paid: true}
   mid:
-    - {provider: gemini, model: gemini-2.0-flash, usd_per_1m_input: 0.10, usd_per_1m_output: 0.40}
+    - {provider: gemini, model: gemini-2.5-flash-lite, usd_per_1m_input: 0.10, usd_per_1m_output: 0.40,
+       paid: false, rpm: 15, rpd: 1000}
+    - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
+       paid: true}
   strong:
-    - {provider: gemini, model: gemini-2.5-pro, usd_per_1m_input: 1.25, usd_per_1m_output: 10.00}
-    - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60}
+    - {provider: gemini, model: gemini-2.5-flash-lite, usd_per_1m_input: 0.10, usd_per_1m_output: 0.40,
+       paid: false, rpm: 15, rpd: 1000}
+    - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
+       paid: true}
   vision:
-    - {provider: gemini, model: gemini-2.0-flash, usd_per_1m_input: 0.10, usd_per_1m_output: 0.40}
+    - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
+       paid: true}
 
 limits:
   # Transient-error retries against the SAME model before walking the fallback ladder.

@@ -115,7 +115,9 @@ class TestCostAccounting:
         # still contributing its token counts.
         from vericlaim.config import ModelSpec
 
-        routing.tiers["strong"] = ModelSpec(provider="alpha", model="alpha-main")
+        routing.tiers["strong"] = ModelSpec(
+            provider="alpha", model="alpha-main", paid=False
+        )
         alpha.default_usage = Usage(10, 10)
 
         gateway = Gateway(routing=routing)

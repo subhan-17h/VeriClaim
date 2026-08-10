@@ -54,12 +54,15 @@ class ScriptedProvider:
         return [model for _, model in self.calls]
 
 
+# paid=False throughout: ModelSpec fails closed, so unmarked specs would be refused
+# by the paid-fallback guard. These fixtures model free providers.
 PRIMARY = ModelSpec(
     provider="alpha",
     model="alpha-main",
     usd_per_1m_input=2.0,
     usd_per_1m_output=10.0,
     timeout_s=5.0,
+    paid=False,
 )
 SECONDARY = ModelSpec(
     provider="beta",
@@ -67,6 +70,7 @@ SECONDARY = ModelSpec(
     usd_per_1m_input=0.5,
     usd_per_1m_output=1.0,
     timeout_s=5.0,
+    paid=False,
 )
 TERTIARY = ModelSpec(
     provider="alpha",
@@ -74,6 +78,7 @@ TERTIARY = ModelSpec(
     usd_per_1m_input=0.1,
     usd_per_1m_output=0.2,
     timeout_s=5.0,
+    paid=False,
 )
 
 

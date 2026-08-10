@@ -18,12 +18,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from vericlaim.config import ModelSpec
+from vericlaim.config import ModelSpec, Settings, get_settings
 from vericlaim.gateway.types import (
     AllProvidersFailedError,
     Completion,
     FallbackEvent,
     Message,
+    PaidFallbackBlockedError,
     ProviderError,
 )
 
@@ -55,7 +56,21 @@ def walk_ladder(
     then openai rejected the key" is a diagnosable message and "invalid api key" alone
     is not.
     """
-    ladder = build_ladder(gateway, task)
+    settings: Settings = getattr(gateway, "settings", None) or get_settings()
+    full_ladder = build_ladder(gateway, task)
+
+    # Drop paid rungs up front unless billed use is explicitly permitted, so a free
+    # tier running dry degrades or refuses rather than quietly starting to spend.
+    if settings.allow_paid_fallback:
+        ladder = full_ladder
+        blocked: list[str] = []
+    else:
+        ladder = tuple(spec for spec in full_ladder if not spec.paid)
+        blocked = [spec.label for spec in full_ladder if spec.paid]
+
+    if not ladder:
+        raise PaidFallbackBlockedError(task, blocked)
+
     events: list[FallbackEvent] = []
     failures: list[tuple[str, str, Exception]] = []
 
@@ -85,4 +100,9 @@ def walk_ladder(
 
         return gateway.with_fallbacks(completion, events) if events else completion
 
+    # Every free rung failed. If paid rungs existed and were withheld, say so --
+    # "all providers failed" would hide the fact that a working option was declined
+    # on policy, which is a different problem with a different fix.
+    if blocked:
+        raise PaidFallbackBlockedError(task, blocked)
     raise AllProvidersFailedError(task, failures)

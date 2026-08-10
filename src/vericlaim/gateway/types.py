@@ -190,3 +190,52 @@ class AllProvidersFailedError(GatewayError):
 
 class StructuredOutputError(GatewayError):
     """The model returned content that is not valid JSON for the requested schema."""
+
+
+class PaidFallbackBlockedError(GatewayError):
+    """Every remaining rung of the ladder is a paid provider, and paid use is off.
+
+    Raised instead of silently spending. Gemini's free tier reports exhaustion as
+    HTTP 429, which is a genuinely transient error, so without this guard a routine
+    free-quota overrun would retry, fall through to a billed provider, and start
+    costing money with no signal that anything had changed.
+    """
+
+    def __init__(self, task: str, blocked: list[str]) -> None:
+        super().__init__(
+            f"Task {task!r} exhausted its free models and the remaining fallbacks are "
+            f"paid ({', '.join(blocked)}). Set VC_ALLOW_PAID_FALLBACK=true to permit "
+            "billed providers."
+        )
+        self.task = task
+        self.blocked = blocked
+
+
+class BudgetExceededError(GatewayError):
+    """A call would push spend past a configured ceiling, so it was not made.
+
+    Checked before the call rather than after, so the ceiling is a bound on actual
+    spend rather than a report of having passed it.
+    """
+
+    def __init__(self, scope: str, spent: float, ceiling: float) -> None:
+        super().__init__(
+            f"{scope} budget exhausted: ${spent:.4f} spent against a ${ceiling:.2f} "
+            "ceiling. Raise VC_MAX_COST_USD_TOTAL / VC_MAX_COST_USD_PER_REQUEST to continue."
+        )
+        self.scope = scope
+        self.spent = spent
+        self.ceiling = ceiling
+
+
+class QuotaExhaustedError(ProviderError):
+    """A model's free-tier daily allowance is spent.
+
+    A ProviderError subclass so the ladder treats it as "this model is done" and moves
+    on. Deliberately not transient: the quota resets at midnight Pacific, and no
+    retry budget can outlast that.
+    """
+
+    def __init__(self, message: str, *, provider: str, model: str, resets_at: str = "") -> None:
+        super().__init__(message, provider=provider, model=model)
+        self.resets_at = resets_at

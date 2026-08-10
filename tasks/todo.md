@@ -28,6 +28,25 @@ implementation plan and [docs/superpowers/specs/2026-08-10-vericlaim-design.md](
 **Acceptance:** `uv run pytest tests/gateway -v` green; mocked call proves per-tier model choice, a
 recorded cost figure, and cross-provider fallback on hard failure. — **MET**, see review below.
 
+### Cost-control addendum (2026-08-11)
+
+Gemini's free tier was cut 50–80% in Dec 2025 (`2.5-flash` 10 RPM / **250 RPD**, `2.5-flash-lite`
+15 RPM / **1000 RPD**). Free-tier exhaustion arrives as HTTP 429 — a genuinely transient error —
+so the C-1 ladder would have retried, fallen through to OpenAI, and **started billing silently**.
+
+- [x] **C-1.7** Spend guard + paid-provider policy: `config.yaml` rebalanced Gemini-first;
+      `paid` on `ModelSpec` (**fails closed**); `VC_ALLOW_PAID_FALLBACK` (default `false`) makes
+      the ladder refuse paid rungs; `VC_MAX_COST_USD_TOTAL=5.00` / `_PER_REQUEST=0.25` checked
+      **before** each call. — `N`
+- [ ] **C-1.8** Free-tier rate limiter: `gateway/quota.py` token bucket over `rpm`/`rpd`; RPM
+      overrun waits, RPD overrun raises `QuotaExhaustedError`; daily counters persist keyed by
+      model + **US/Pacific** date so a restart cannot reset them. Self-throttling is what stops
+      us generating the 429s that would walk the ladder toward a paid provider. — `N`
+
+**Acceptance:** free tier exhausted with the flag off → paid rung refused, **$0.00** spent, error
+names `VC_ALLOW_PAID_FALLBACK`; flag on → hop taken and priced; loop past the ceiling →
+`BudgetExceededError`.
+
 ## Phase C-2 — The Evidence spine
 
 - [ ] **C-2.1** `evidence.py` — frozen `Evidence` + typed locator union (policy / sql / spreadsheet /

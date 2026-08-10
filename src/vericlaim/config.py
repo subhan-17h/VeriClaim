@@ -124,6 +124,22 @@ class Settings(BaseSettings):
     sql_candidate_count: int = 4
     sql_multi_candidate_enabled: bool = True
 
+    # --- Cost control -----------------------------------------------------
+    # Gemini's free tier serves every tier; OpenAI rungs are marked paid in
+    # config.yaml and the ladder refuses them unless this is turned on. Flip it
+    # deliberately for a demo or a paid evaluation run.
+    allow_paid_fallback: bool = False
+    # Hard ceilings checked before each call, against the request's UsageLedger.
+    # The per-request cap also catches a pathological retry loop inside one question.
+    max_cost_usd_total: float = 5.00
+    max_cost_usd_per_request: float = 0.25
+    # Client-side throttling so we never generate the 429s that would otherwise walk
+    # the ladder toward a paid provider.
+    enforce_rate_limits: bool = True
+    quota_state_path: Path = PROJECT_ROOT / ".vericlaim_cache" / "quota.json"
+    # Longest we will wait for an RPM slot before giving up on a model.
+    max_rate_limit_wait_s: float = 20.0
+
     # --- Orchestration ----------------------------------------------------
     max_replans: int = 2
     evidence_row_limit: int = 30
@@ -180,7 +196,16 @@ class Settings(BaseSettings):
 
 @dataclass(frozen=True, slots=True)
 class ModelSpec:
-    """One concrete model endpoint together with what it costs to call."""
+    """One concrete model endpoint together with what it costs and what it allows.
+
+    ``paid`` is the flag the fallback ladder consults. Gemini's free tier signals
+    exhaustion with HTTP 429 -- a legitimately transient error -- so without an
+    explicit paid marker, running out of free quota would retry, fall through to a
+    billed provider, and quietly start spending.
+
+    ``rpm``/``rpd`` are the provider's published free-tier limits, enforced
+    client-side so we self-throttle instead of generating those 429s.
+    """
 
     provider: str
     model: str
@@ -188,6 +213,17 @@ class ModelSpec:
     usd_per_1m_output: float = 0.0
     timeout_s: float = 60.0
     max_output_tokens: int = 4096
+    # Fails closed. An entry that omits the flag -- in YAML or in code -- is treated
+    # as billable and therefore refused by default. Guessing wrong in this direction
+    # costs a declined call; guessing wrong the other way costs money.
+    paid: bool = True
+    rpm: int | None = None
+    rpd: int | None = None
+
+    @property
+    def label(self) -> str:
+        """A stable ``provider/model`` identifier for traces, errors, and quota keys."""
+        return f"{self.provider}/{self.model}"
 
     def cost_usd(self, input_tokens: int, output_tokens: int) -> float:
         """Return the USD cost of one call at this model's rates."""
@@ -252,6 +288,9 @@ def _model_spec(raw: dict[str, Any], *, defaults: ModelSpec | None = None) -> Mo
                 defaults.max_output_tokens if defaults else 4096,
             )
         ),
+        paid=bool(raw.get("paid", True)),
+        rpm=int(raw["rpm"]) if raw.get("rpm") is not None else None,
+        rpd=int(raw["rpd"]) if raw.get("rpd") is not None else None,
     )
 
 

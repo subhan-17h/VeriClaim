@@ -23,9 +23,16 @@ import json
 import time
 from typing import Any
 
-from vericlaim.config import ModelRouting, ModelSpec, get_model_routing
+from vericlaim.config import (
+    ModelRouting,
+    ModelSpec,
+    Settings,
+    get_model_routing,
+    get_settings,
+)
 from vericlaim.gateway.providers import get_provider
 from vericlaim.gateway.types import (
+    BudgetExceededError,
     Completion,
     FallbackEvent,
     ImagePart,
@@ -54,6 +61,23 @@ def _coerce_messages(messages: str | list[Message] | list[dict[str, Any]]) -> li
                 )
             )
     return coerced
+
+
+_SESSION_LEDGER: UsageLedger | None = None
+
+
+def _session_ledger() -> UsageLedger:
+    """Return the process-wide ledger the total spend ceiling is measured against."""
+    global _SESSION_LEDGER
+    if _SESSION_LEDGER is None:
+        _SESSION_LEDGER = UsageLedger()
+    return _SESSION_LEDGER
+
+
+def reset_session_spend() -> None:
+    """Clear accumulated session spend. For tests and long-lived processes."""
+    global _SESSION_LEDGER
+    _SESSION_LEDGER = UsageLedger()
 
 
 def _parse_json(text: str, *, task: str) -> Any:
@@ -86,9 +110,18 @@ class Gateway:
         *,
         routing: ModelRouting | None = None,
         ledger: UsageLedger | None = None,
+        settings: Settings | None = None,
+        session_ledger: UsageLedger | None = None,
     ) -> None:
         self._routing = routing or get_model_routing()
+        self.settings = settings or get_settings()
         self.ledger = ledger if ledger is not None else UsageLedger()
+        # The session ledger spans many requests, so the total ceiling bounds the
+        # project rather than each question in isolation. Defaults to the process-wide
+        # one so a caller cannot accidentally opt out of the total cap.
+        self.session_ledger = (
+            session_ledger if session_ledger is not None else _session_ledger()
+        )
 
     @property
     def routing(self) -> ModelRouting:
@@ -111,6 +144,7 @@ class Gateway:
         bad API key against the same model wastes the retry budget that a genuine
         rate limit needs.
         """
+        self._check_budget()
         provider = get_provider(spec.provider)
         attempts = 0
         started = time.perf_counter()
@@ -227,6 +261,25 @@ class Gateway:
             json_schema=json_schema,
         )
 
+    def _check_budget(self) -> None:
+        """Refuse a call that would push spend past a ceiling.
+
+        Checked before the call, not after, so the ceiling bounds actual spend rather
+        than merely reporting that it was passed. The per-request cap is what catches
+        a pathological retry or replan loop inside a single question; the session cap
+        bounds the project as a whole.
+        """
+        per_request = self.settings.max_cost_usd_per_request
+        if per_request > 0 and self.ledger.total_cost_usd >= per_request:
+            raise BudgetExceededError(
+                "Per-request", self.ledger.total_cost_usd, per_request
+            )
+        total = self.settings.max_cost_usd_total
+        if total > 0 and self.session_ledger.total_cost_usd >= total:
+            raise BudgetExceededError(
+                "Session", self.session_ledger.total_cost_usd, total
+            )
+
     def _finish(self, completion: Completion) -> Completion:
         """Record a completed call to the ledger and annotate the active trace span.
 
@@ -235,6 +288,10 @@ class Gateway:
         must never break the call it is describing.
         """
         trace_completion(completion)
+        # Recorded to both: the request ledger drives the per-question figure the API
+        # reports, the session ledger enforces the project-wide ceiling.
+        if self.session_ledger is not self.ledger:
+            self.session_ledger.record(completion)
         return self.ledger.record(completion)
 
     @staticmethod
