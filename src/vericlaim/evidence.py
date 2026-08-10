@@ -311,10 +311,125 @@ class Evidence:
         }
 
 
+# ----------------------------------------------------------------------- collection
+
+
+class EvidenceSet:
+    """An ordered, deduplicated collection of evidence with stable citation ids.
+
+    Ids are assigned on insertion and never reassigned. That is the whole point:
+    ``[E3]`` must mean the same passage when synthesis writes it and when
+    verification checks it. Grouping or re-sorting for display must not disturb them,
+    so every view returns a new ordering over the same tagged objects.
+    """
+
+    def __init__(self, evidence: list[Evidence] | None = None) -> None:
+        self._items: list[Evidence] = []
+        self._by_id: dict[str, Evidence] = {}
+        self._seen: set[tuple[Any, ...]] = set()
+        for item in evidence or []:
+            self.add(item)
+
+    # ------------------------------------------------------------------- building
+
+    def add(self, evidence: Evidence) -> Evidence | None:
+        """Add one piece of evidence, returning the tagged copy, or None if duplicate."""
+        key = evidence.dedup_key()
+        if key in self._seen:
+            return None
+        self._seen.add(key)
+        tagged = evidence.with_id(f"E{len(self._items) + 1}")
+        self._items.append(tagged)
+        self._by_id[tagged.id] = tagged
+        return tagged
+
+    def extend(self, evidence: list[Evidence]) -> list[Evidence]:
+        """Add many, returning only those actually accepted."""
+        return [tagged for item in evidence if (tagged := self.add(item)) is not None]
+
+    # -------------------------------------------------------------------- reading
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def __iter__(self):
+        return iter(self._items)
+
+    def __bool__(self) -> bool:
+        return bool(self._items)
+
+    def __contains__(self, evidence_id: object) -> bool:
+        return evidence_id in self._by_id
+
+    @property
+    def items(self) -> tuple[Evidence, ...]:
+        return tuple(self._items)
+
+    @property
+    def ids(self) -> tuple[str, ...]:
+        return tuple(item.id for item in self._items)
+
+    def get(self, evidence_id: str) -> Evidence | None:
+        """Return the evidence carrying ``evidence_id``, or None."""
+        return self._by_id.get(evidence_id)
+
+    def by_source(self) -> dict[SourceType, list[Evidence]]:
+        """Group by source, preserving insertion order and ids within each group."""
+        grouped: dict[SourceType, list[Evidence]] = {}
+        for item in self._items:
+            grouped.setdefault(item.source_type, []).append(item)
+        return grouped
+
+    def source_types(self) -> tuple[SourceType, ...]:
+        """Which sources actually contributed, in the order they first appeared."""
+        seen: list[SourceType] = []
+        for item in self._items:
+            if item.source_type not in seen:
+                seen.append(item.source_type)
+        return tuple(seen)
+
+    def low_confidence(self, floor: float) -> tuple[Evidence, ...]:
+        """Evidence that synthesis must qualify rather than assert."""
+        return tuple(item for item in self._items if item.is_low_confidence(floor))
+
+    # ------------------------------------------------------------------ rendering
+
+    def render_for_synthesis(self, *, low_confidence_floor: float | None = None) -> str:
+        """Render the only view of the evidence that synthesis is ever given.
+
+        Raw tool output never reaches the synthesizer; this string is the boundary.
+        Each block is tagged with its id so the model has something concrete to cite,
+        and low-confidence blocks are marked inline so the prompt does not have to
+        carry that judgement separately.
+        """
+        if not self._items:
+            return "No evidence was retrieved."
+
+        blocks: list[str] = []
+        for item in self._items:
+            header = f"[{item.id}] {item.label} — {item.cite()}"
+            if (
+                low_confidence_floor is not None
+                and item.is_low_confidence(low_confidence_floor)
+            ):
+                header += "  ⚠ LOW CONFIDENCE — qualify, do not assert"
+            blocks.append(f"{header}\n{item.content.strip()}")
+        return "\n\n".join(blocks)
+
+    def serialize(self) -> list[dict[str, Any]]:
+        """Serialize for the API and the UI's per-source evidence cards."""
+        return [item.to_dict() for item in self._items]
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        counts = {source: len(items) for source, items in self.by_source().items()}
+        return f"EvidenceSet({len(self._items)} items, {counts})"
+
+
 __all__ = [
     "SOURCE_LABELS",
     "SOURCE_TYPES",
     "Evidence",
+    "EvidenceSet",
     "Locator",
     "LocatorMismatchError",
     "PolicyLocator",
