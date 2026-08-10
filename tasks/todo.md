@@ -17,9 +17,9 @@ implementation plan and [docs/superpowers/specs/2026-08-10-vericlaim-design.md](
       rewritten for VeriClaim, `tasks/`, design doc. — `N`
 - [x] **C-1.2** `config.py` — pydantic-settings `Settings` (`VC_` prefix) + `config.yaml` per-task
       model routing. — `V` CSRS `config.py:20-107`, `A` unibot `config.yaml` routing idea
-- [ ] **C-1.3** `gateway/providers.py` — OpenAI + Gemini adapters behind one protocol, module-cached
+- [x] **C-1.3** `gateway/providers.py` — OpenAI + Gemini adapters behind one protocol, module-cached
       clients, explicit timeouts. — `A` unibot `llm.py` signature only
-- [ ] **C-1.4** `gateway/__init__.py` — `complete_json` / `complete` / `complete_vision`; reads
+- [x] **C-1.4** `gateway/__init__.py` — `complete_json` / `complete` / `complete_vision`; reads
       `response.usage` → tokens, cost, latency per call. — `N`
 - [ ] **C-1.5** `gateway/fallback.py` — transient retry → alternate model → alternate provider →
       structured degradation; fallback events recorded. — `N`
