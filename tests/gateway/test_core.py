@@ -127,6 +127,15 @@ class TestCostAccounting:
 
 
 class TestTransientRetry:
+    """Single-model retry semantics.
+
+    These target call_model, which handles exactly one model. Walking on to a
+    different model is the ladder's job and is covered in test_fallback.py.
+    """
+
+    def _spec(self, routing):
+        return routing.resolve("synthesize")
+
     def test_transient_failure_is_retried_against_the_same_model(self, routing, alpha):
         alpha.script = {"alpha-main": [_transient(), "recovered"]}
         result = Gateway(routing=routing).complete("synthesize", "q")
@@ -137,8 +146,11 @@ class TestTransientRetry:
 
     def test_retries_are_bounded(self, routing, alpha):
         alpha.script = {"alpha-main": [_transient()]}  # always fails
+        gateway = Gateway(routing=routing)
         with pytest.raises(TransientProviderError):
-            Gateway(routing=routing).complete("synthesize", "q")
+            gateway.call_model(
+                self._spec(routing), [Message("user", "q")], task="synthesize"
+            )
         # 1 initial attempt + transient_retries (2)
         assert len(alpha.calls) == 3
 
@@ -146,15 +158,22 @@ class TestTransientRetry:
         # Retrying a malformed request or a bad key wastes the budget a genuine
         # rate limit needs, so permanents propagate immediately.
         alpha.script = {"alpha-main": [_permanent(), "would-have-worked"]}
+        gateway = Gateway(routing=routing)
         with pytest.raises(PermanentProviderError):
-            Gateway(routing=routing).complete("synthesize", "q")
+            gateway.call_model(
+                self._spec(routing), [Message("user", "q")], task="synthesize"
+            )
         assert len(alpha.calls) == 1
 
-    def test_failed_calls_are_not_recorded_in_the_ledger(self, routing, alpha):
+    def test_call_model_does_not_touch_the_ledger(self, routing, alpha):
+        # Recording happens in the public methods after parsing, so a failed
+        # attempt can never inflate reported spend.
         alpha.script = {"alpha-main": [_permanent()]}
         gateway = Gateway(routing=routing)
         with pytest.raises(PermanentProviderError):
-            gateway.complete("synthesize", "q")
+            gateway.call_model(
+                self._spec(routing), [Message("user", "q")], task="synthesize"
+            )
         assert gateway.ledger.calls == []
 
 

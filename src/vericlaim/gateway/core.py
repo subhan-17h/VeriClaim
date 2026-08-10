@@ -211,18 +211,19 @@ class Gateway:
         temperature: float,
         json_schema: dict[str, Any] | None = None,
     ) -> Completion:
-        """Execute ``task``. Overridden by the fallback layer to add the ladder.
+        """Execute ``task`` down its fallback ladder.
 
         Deliberately does not record to the ledger: the public methods record after
         parsing, so the ledger entry and the returned object are the same object.
         """
-        spec = self._routing.resolve(task)
-        return self.call_model(
-            spec,
+        from vericlaim.gateway.fallback import walk_ladder
+
+        return walk_ladder(
+            self,
+            task,
             messages,
-            task=task,
-            json_schema=json_schema,
             temperature=temperature,
+            json_schema=json_schema,
         )
 
     @staticmethod
