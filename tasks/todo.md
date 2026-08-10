@@ -52,7 +52,7 @@ names `VC_ALLOW_PAID_FALLBACK`; flag on → hop taken and priced; loop past the 
 - [x] **C-2.1** `evidence.py` — frozen `Evidence` + typed locator union (policy / sql / spreadsheet /
       scanned) + `Provenance`. — `N`
 - [x] **C-2.2** `EvidenceSet` — stable `E1..En` ids, dedup, per-source grouping, serialization. — `N`
-- [ ] **C-2.3** Citation contract — `resolve_citations`; an unresolvable marker is a hard failure. — `N`
+- [x] **C-2.3** Citation contract — `resolve_citations`; an unresolvable marker is a hard failure. — `N`
 
 **Acceptance:** mixed-source set serializes and every marker resolves; `[E9]` against a 4-item set
 fails loudly.
