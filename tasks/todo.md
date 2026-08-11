@@ -80,15 +80,18 @@ reports all-skipped; deleting a file removes its chunks.
 
 ## Phase C-4 — Scanned PDFs / OCR (source 4)
 
-- [ ] **C-4.1** `scanned/classifier.py` — per-page `digital | scanned | mixed`. — `N`
-- [ ] **C-4.2** `scanned/docling_ocr.py` — `do_ocr=True` with **explicit** `RapidOcrOptions(lang=["english"])`
+- [x] **C-4.1** `scanned/classifier.py` — per-page `digital | scanned | mixed`. — `N`
+- [x] **C-4.2** `scanned/docling_ocr.py` — `do_ocr=True` with **explicit** `RapidOcrOptions(lang=["english"])`
       (the default is `["chinese"]`). — `N`
-- [ ] **C-4.3** Confidence capture — keep `ConversionResult`, thread `ocr_confidence` through every
+- [x] **C-4.3** Confidence capture — keep `ConversionResult`, thread `ocr_confidence` through every
       layer to the UI. — `N`
-- [ ] **C-4.4** `scanned/chunking.py` — separate path; OCR text has no reliable headings. — `N`
-- [ ] **C-4.5** Vision escalation below the confidence floor, recorded as a gateway fallback. — `N`
-- [ ] **C-4.6** `scanned/tool.py` — `search_scanned()`; low-confidence evidence flagged. — `N`
-- [ ] **C-4.7** `scripts/warm_models.py` — add OCR weights. — `A` CSRS
+- [x] **C-4.4** `scanned/chunking.py` — separate path; the policy clause grammar fabricates clause
+      ids from OCR text. — `N`
+- [x] **C-4.5** Vision escalation below the confidence floor, recorded as a gateway fallback. — `N`
+- [x] **C-4.6** `scanned/tool.py` — `search_scanned()`; low-confidence evidence flagged. Absorbed
+      the scanned indexing path (`scanned/indexer.py` + the processor seam), which no task owned
+      and without which the tool had no corpus to search. — `N`
+- [x] **C-4.7** `scripts/warm_models.py` — add OCR weights. — `A` CSRS
 
 **Acceptance:** an image-only PDF (zero extractable text) indexes to non-zero chunks with per-page
 confidence and cites by page; CSRS's silent zero-chunk path proven closed by test.
@@ -326,5 +329,83 @@ clause.
 **Carried forward.** `PolicySearcher` takes `source_type` and `tool_name`, so C-4 reuses it for
 the scanned source rather than reimplementing search. `ZeroChunkError` is the guard that makes
 an image-only PDF reaching a non-OCR parser fail loudly — the exact failure C-4 exists to fix.
+
+**No lessons recorded.** No user corrections during this phase.
+
+### Phase C-4 — closed
+
+**Delivered.** The scanned source end to end: classify pages by text density, OCR the image-only
+ones with an explicitly named engine, keep per-page confidence, re-read the worst pages through a
+vision model that is allowed to refuse, chunk without inventing clause numbers, index through the
+shared loop, and return `Evidence` citing document, page, and OCR score.
+
+**Evidence.** `pytest -m "not ocr and not docling and not ollama"` → **657 passed** (136 new);
+`-m "docling or ocr"` → 15 passed; ruff clean. The live acceptance run, against real RapidOCR,
+real Ollama embeddings, and a real Gemini vision call:
+
+| Property | Result |
+|---|---|
+| Index three image-only PDFs (zero extractable text) | 3 documents, **7 chunks**, every one page-anchored |
+| Per-page confidence populated | CLM-1001 0.99, CLM-1002 0.99, CLM-1003 **0.00** |
+| `search_scanned("sudden rupture of a copper supply pipe", claim_id="CLM-1001")` | `CLM-1001_INSPECTION.pdf › p.1 (OCR 0.99)`, findings and conclusion both cited |
+| `search_scanned("gradual seepage over several months", claim_id="CLM-1002")` | the counter-evidence scan, retrieved and not smoothed away |
+| Ruined scan escalated to `gemini-3.5-flash` | model returned `legible=false`; **the refusal held** and the page stayed refusal-grade evidence |
+| Spend | **$0.000000** (free tier) |
+| `scripts/warm_models.py` | Docling (layout, table, OCR), FlashRank, Ollama all ready |
+
+**Measurement that overturned the plan.** Four findings, each from running the code rather than
+reading it:
+
+- *The density threshold was above every real page.* `0.005` as planned; digital pages measure
+  0.00142–0.00230 and image-only scans exactly 0.00000. It would have routed the entire policy
+  corpus through OCR. Corrected to `0.0002`, ~7× below the sparsest real text page.
+- *`ocr_score` does not measure quality.* Clean scan 0.991, degraded-with-real-errors 0.989. It
+  reports confidence in what OCR *found*, not coverage of what was on the page.
+- *The worst case arrives as `NaN`, not as a low number.* A page yielding no cells scores `NaN`,
+  and `nan < floor` is `False` — the plan's trigger would have passed the single most degraded
+  page through untouched. Non-finite now collapses to 0.0.
+- *OCR output does have headings.* The plan justified a separate chunker on their absence.
+  Docling's layout model emits them. The real justification is sharper: the policy clause grammar
+  reads `184.000 Estimated cost of repair` as clause "184.000", and a fabricated clause id is
+  worse than none, because citing a clause asserts the clause exists.
+
+**Decisions worth defending.**
+
+- *An unreadable page emits one refusal-grade chunk, not nothing.* Otherwise the zero-chunk guard
+  aborts a whole corpus over one smeared page, and the page becomes indistinguishable from one
+  that was never in the document. "We could not read this" is evidence in its own right.
+- *Escalation is structured to make refusal easy.* The schema's first field is a legibility
+  verdict, the prompt forbids inference and completion, and an illegible verdict discards the
+  model's text entirely. Asked to transcribe a page it cannot read, a model writes a fluent
+  inspection report — the fabrication this project forbids, arriving with no visible defect.
+- *An escalated page is capped below 1.0.* A page that needed a second reading is not a page to
+  then call pristine.
+- *`escalated` means the text came from the vision tier*, not that one was called. A refusal
+  assisted nothing, and the flag renders in the citation as "vision-assisted".
+- *The claim reference comes from the path, never the recognised text.* An inspection report
+  states its own reference, but a misread character there would attach its evidence to the wrong
+  matter.
+- *One indexing loop, one seam.* Change detection, delete-before-add, the zero-chunk guard, and
+  the manifest consistency check are the rules that keep an index honest; only "path → chunks"
+  differs between the sources, so only that is injected.
+- *`PolicySearcher`'s `source_type`/`tool_name` parameters were not enough.* The trace span name
+  and the locator differ too, so retrieval moved to a `ChunkSearcher` base and each source fixes
+  all three by construction — a scanned-scoped searcher building policy locators would cite
+  somebody's paperwork as a policy clause.
+- *Required OCR weights are resolved through Docling, not listed by hand.* A checkpoint version
+  bump would otherwise leave the warm script verifying files the parser no longer uses.
+
+**Two holes closed that C-4.5 had left open.** An unbuildable gateway (a missing key) raised
+straight out of escalation and would have aborted a corpus, contradicting that module's own
+promise; it now degrades exactly as an exhausted quota does. And BM25's format version was bumped,
+because an index persisted before `claim_id` became filterable would still look fresh to the
+content signature and quietly cost a claim-scoped search its sparse leg.
+
+**Carried forward — a real limitation, not a defect.** `ocr_confidence` catches pages that were
+*not read*, not pages that were *misread*. The degraded fixture scores 0.99 and is therefore not
+flagged low-confidence, despite genuine transcription errors in its text (`firstfloorbathroom`,
+`PKR 96.000` for 96,000), and escalation never fires on it. C-11 must score OCR field-value match
+directly rather than trusting the confidence score, and C-8.4's degraded documents should not be
+assumed to self-identify.
 
 **No lessons recorded.** No user corrections during this phase.
