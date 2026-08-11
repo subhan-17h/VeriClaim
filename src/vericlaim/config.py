@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     # below it after escalation is flagged so synthesis qualifies rather than asserts.
     ocr_confidence_floor: float = 0.60
     ocr_vision_escalation: bool = True
+    # Ceiling on the confidence an escalated page may claim. A page that needed a
+    # second reading is not a page to then call pristine, and capping below 1.0 keeps
+    # its evidence qualified rather than letting a model's self-report promote a
+    # degraded scan to the same standing as a clean one.
+    ocr_escalated_confidence_cap: float = 0.85
     # Characters per square point of page area. A page below this is treated as
     # scanned and routed to the expensive OCR path. Gating matters in both
     # directions: running full OCR over digital policy PDFs is prohibitively slow,
