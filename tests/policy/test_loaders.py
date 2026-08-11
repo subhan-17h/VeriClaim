@@ -26,13 +26,15 @@ HOMESECURE = FIXTURES / "HomeSecure_Plus_2026.pdf"
 
 
 def test_registry_dispatches_on_extension() -> None:
-    assert isinstance(get_parser(Path("a/b/wording.pdf")), PdfParser)
+    # Which implementation serves PDFs is configuration; see test_docling_parser.py.
+    assert isinstance(get_parser(Path("a/b/wording.pdf"), pdf_parser="pypdf"), PdfParser)
     assert isinstance(get_parser(Path("a/b/notes.txt")), TextParser)
     assert isinstance(get_parser(Path("a/b/notes.md")), TextParser)
 
 
 def test_registry_is_case_insensitive() -> None:
-    assert isinstance(get_parser(Path("WORDING.PDF")), PdfParser)
+    assert isinstance(get_parser(Path("WORDING.PDF"), pdf_parser="pypdf"), PdfParser)
+    assert isinstance(get_parser(Path("NOTES.TXT")), TextParser)
 
 
 def test_unsupported_extension_has_no_parser() -> None:
@@ -42,8 +44,13 @@ def test_unsupported_extension_has_no_parser() -> None:
 
 def test_registered_parsers_satisfy_the_protocol() -> None:
     for extension in supported_extensions():
-        parser = get_parser(Path(f"doc{extension}"))
+        parser = get_parser(Path(f"doc{extension}"), pdf_parser="pypdf")
         assert isinstance(parser, DocumentParser)
+
+
+def test_pdf_is_a_supported_extension() -> None:
+    """PDFs dispatch outside the extension table, so membership is asserted explicitly."""
+    assert ".pdf" in supported_extensions()
 
 
 # ------------------------------------------------------------------- traversal
