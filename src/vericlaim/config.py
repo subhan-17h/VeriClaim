@@ -95,10 +95,17 @@ class Settings(BaseSettings):
     # below it after escalation is flagged so synthesis qualifies rather than asserts.
     ocr_confidence_floor: float = 0.60
     ocr_vision_escalation: bool = True
-    # A page whose extracted-character density falls below this is treated as scanned
-    # and routed to the expensive OCR path. Gating matters: running full OCR over
-    # digital policy PDFs is prohibitively slow.
-    scanned_char_density_threshold: float = 0.005
+    # Characters per square point of page area. A page below this is treated as
+    # scanned and routed to the expensive OCR path. Gating matters in both
+    # directions: running full OCR over digital policy PDFs is prohibitively slow,
+    # and skipping it on a real scan makes that document invisible.
+    #
+    # Set from measurement, not intuition. Digital pages in this project's corpus
+    # measure 0.00142-0.00230 and image-only scans measure exactly 0.00000, so this
+    # sits ~7x below the sparsest real text page with room on both sides. The
+    # original 0.005 was above every real page and would have classified the entire
+    # policy corpus as scanned.
+    scanned_char_density_threshold: float = 0.0002
 
     # --- Chunking ---------------------------------------------------------
     chunk_size: int = 400  # approximate tokens
