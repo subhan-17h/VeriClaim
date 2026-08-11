@@ -59,20 +59,21 @@ fails loudly. — **MET**, see review below.
 
 ## Phase C-3 — Policy RAG (source 1)
 
-- [ ] **C-3.1** `policy/loaders/` — parser Protocol + registry, text parser, pdfplumber fallback with
-      running header/footer removal. — `V` CSRS
-- [ ] **C-3.2** `docling_parser.py` — page-break-placeholder export; converter cache keyed on the
+- [x] **C-3.1** `policy/loaders/` — parser Protocol + registry, text parser, pdfplumber fallback with
+      running header/footer removal; `policy/models.py` carries the Chunk contract. — `V` CSRS
+- [x] **C-3.2** `docling_parser.py` — page-break-placeholder export; converter cache keyed on the
       **full option set**, not just artifacts path. — `A` CSRS
-- [ ] **C-3.3** `policy/chunking.py` — `split_text` verbatim; NIST/CSF heading regexes **replaced**
-      with policy-form patterns. — `A` CSRS
-- [ ] **C-3.4** `policy/embeddings.py` — injectable `Embedder`, nomic prefixes, no module-level
+- [x] **C-3.3** `policy/chunking.py` — `split_text` verbatim; NIST/CSF heading regexes **replaced**
+      with policy-form patterns; merged clause runs recovered. — `A` CSRS
+- [x] **C-3.4** `policy/embeddings.py` — injectable `Embedder`, nomic prefixes, no module-level
       client. — `A` CSRS
-- [ ] **C-3.5** `policy/store.py` — Chroma + SHA-256 manifest, atomic writes; **relative-path doc
-      identity** (not bare filename); `search()` gains metadata `filters`. — `A` CSRS
-- [ ] **C-3.6** `policy/retrieval.py` — BM25 signature validation, `rrf_fuse`, hybrid search,
-      **reranking enabled**. — `V` CSRS
-- [ ] **C-3.7** `policy/tool.py` — `search_policy() -> list[Evidence]`; **loud failure on zero chunks
-      from a non-zero-page document**. — `N`
+- [x] **C-3.5** `policy/{manifest,store,indexer}.py` — Chroma + SHA-256 manifest, atomic writes;
+      **relative-path doc identity** (not bare filename); `search()` gains metadata `filters`;
+      `ZeroChunkError` on a paged document that yields nothing. — `A` CSRS
+- [x] **C-3.6** `policy/retrieval.py` — BM25 signature validation **and metadata filtering**,
+      `rrf_fuse`, hybrid search, **reranking enabled**. — `V` CSRS
+- [x] **C-3.7** `policy/tool.py` — `search_policy() -> list[Evidence]`; unconditional source
+      scoping; `EmptyIndexError` distinct from no results. — `N`
 
 **Acceptance:** policy query returns evidence citing correct document + page + clause; re-index
 reports all-skipped; deleting a file removes its chunks.
@@ -274,3 +275,56 @@ available ids.
 
 **Carried forward.** `render_for_synthesis` is the boundary C-7.8 must call and nothing else;
 `resolve_citations` is what C-7.9 checks and what C-11's precision/recall scorers reuse.
+
+### Phase C-3 — closed
+
+**Delivered.** The policy source end to end: parse (two interchangeable PDF parsers), chunk at
+clause boundaries, embed through an injectable protocol, store in Chroma under path-keyed
+identity, retrieve hybrid with reranking, and return `Evidence` carrying document, page, and
+clause.
+
+**Evidence.** `pytest -m "not docling and not ollama"` → **521 passed** (203 new); `-m docling`
+→ 5 passed; ruff clean. The live acceptance run, against real Ollama embeddings and Docling:
+
+| Property | Result |
+|---|---|
+| Index the fixture corpus | 3 documents, **63 chunks** |
+| Re-index unchanged | **all 3 skipped**, zero embedding calls |
+| `search_policy("sudden escape of water from fixed plumbing")` | `HomeSecure_Plus_2026.pdf › p.3 › 4.2` **first**, PKR 25,000 in its content |
+| `search_policy("is gradual leakage covered")` | exclusion clauses 2.1, 4.1, 5.1 across all three documents |
+| Delete a file | its chunks and manifest entry removed; 3 → 2 documents |
+| Reranker (FlashRank, live weights) | ranks clause 5.1 first for "is gradual leakage excluded" |
+
+**Decisions worth defending.**
+
+- *One collection, `source_type` filter, OCR fields declared now.* Policy and scanned differ in
+  how text is obtained, not in what a retrievable passage is. A second storage stack would
+  duplicate the manifest, index lifecycle, and reset story for no retrieval benefit. The OCR
+  fields carry `None` until C-4 because adding a field to a schema whose rows are already
+  persisted in a vector store means a migration.
+- *Document identity is the corpus-relative path, everywhere.* The reference implementation
+  keys on the basename and enforces global filename uniqueness to survive it — impossible for
+  `claims/CLM-1001/estimate.pdf` beside `claims/CLM-1002/estimate.pdf`. The coupling was deeper
+  than the manifest: chunk ids, deletion, counts, and pagination all keyed on the name.
+- *The sparse index filters its own results.* Dense search filters at the store, so an
+  unfiltered BM25 leg would fuse scanned pages into a policy question and the tool would cite
+  one as a policy clause.
+- *`clause_id` separate from the breadcrumb.* "Cite the clause" becomes an equality check
+  rather than a substring search, which is what makes C-11's clause-level citation accuracy
+  deterministic.
+- *Merged clause runs are recovered.* Docling's reading-order model collapsed the lead-in and
+  clauses 5.1–5.4 into one list item, hiding those clause numbers from line-based matching. The
+  split boundary is deliberately narrow — a false split would fabricate a clause number.
+- *Policy evidence is confidence 1.0.* Retrieval score is relevance, not trustworthiness.
+  Putting it in that field would make synthesis hedge about a clause it can read verbatim.
+- *Empty index raises; empty result does not.* "We do not know" and "the wording is silent"
+  lead to opposite decisions.
+- *The converter cache key is the full option set.* Keyed on the artifacts path alone, C-4's
+  request for an OCR converter would receive the digital-only one and every scanned page would
+  extract as empty, with no error.
+
+**Carried forward.** `PolicySearcher` takes `source_type` and `tool_name`, so C-4 reuses it for
+the scanned source rather than reimplementing search. `ZeroChunkError` is the guard that makes
+an image-only PDF reaching a non-OCR parser fail loudly — the exact failure C-4 exists to fix.
+
+**No lessons recorded.** No user corrections during this phase.
