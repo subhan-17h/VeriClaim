@@ -1,0 +1,38 @@
+# The transactional claims database (source 2) and, from C-6, the normalised
+# spreadsheet tables (source 3).
+#
+# Two roles, deliberately: `vericlaim` owns and writes the corpus, `vericlaim_readonly`
+# is what the agent connects as. That separation is the last line of SQL defence beneath
+# the AST validator -- it holds even if the validator has a bug, because it is enforced
+# by Postgres rather than by our code. scripts/init.sql provisions it at first boot;
+# scripts/smoke.py proves it.
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: vericlaim-postgres
+    environment:
+      POSTGRES_DB: vericlaim
+      POSTGRES_USER: vericlaim
+      # `:?` refuses to start rather than inventing a password. Both are read from
+      # .env, which is gitignored; .env.example is the committed contract.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      READONLY_PASSWORD: ${READONLY_PASSWORD:?READONLY_PASSWORD must be set in .env}
+    ports:
+      # Bound to loopback: a bare "5435:5432" would publish the claims database to
+      # every interface on the machine. 5435 avoids both the default 5432 and the
+      # Supabase stack occupying 54321-54324.
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Runs once, on an empty data directory. Editing init.sql later has no effect
+      # until the volume is removed -- `docker compose down -v` to re-provision.
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/10-readonly.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vericlaim -d vericlaim"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres_data:

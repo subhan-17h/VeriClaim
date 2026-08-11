@@ -98,7 +98,7 @@ confidence and cites by page; CSRS's silent zero-chunk path proven closed by tes
 
 ## Phase C-5 — SQL transactions (source 2)
 
-- [ ] **C-5.1** `docker-compose.yml` (postgres:16, port 5435) + `init.sql` read-only role +
+- [x] **C-5.1** `docker-compose.yml` (postgres:16, port 5435) + `init.sql` read-only role +
       `smoke.py` asserting `InsufficientPrivilege`. — `V` unibot
 - [ ] **C-5.2** `sql/db.py` — psycopg3 with **connection pooling** + statement timeout. — `A` unibot
 - [ ] **C-5.3** `sql/validator.py` — the AST safety layer, **near-verbatim**; deliberately relax the
