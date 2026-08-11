@@ -41,14 +41,20 @@ __all__ = (
     "rrf_fuse",
 )
 
-_FORMAT_VERSION = 1
+# Bumped to 2 when claim_id joined the filterable fields. An index persisted before
+# that stores no claim_id, and the content signature would still call it fresh -- so a
+# claim-scoped search would quietly lose its sparse leg and half its recall. A version
+# mismatch reads as corrupt, which the searcher already self-heals by rebuilding.
+_FORMAT_VERSION = 2
 _METADATA_NAME = "metadata.json"
 _TOKEN_PATTERN = r"(?u)\b\w[\w-]*\b"
 _STEMMER = Stemmer.Stemmer("english")
 
 # The chunk fields the sparse index can filter on. Deliberately narrow: these are the
-# scoping dimensions (which source, which document), not arbitrary metadata.
-_FILTERABLE = ("source_type", "doc_id")
+# scoping dimensions (which source, which document, which matter), not arbitrary
+# metadata. A dimension the dense side can scope by but the sparse side cannot would
+# fuse out-of-scope results back into a scoped search.
+_FILTERABLE = ("source_type", "doc_id", "claim_id")
 
 _METADATA_KEYS = {
     "chunk_ids",

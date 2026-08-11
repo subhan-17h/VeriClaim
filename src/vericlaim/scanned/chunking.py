@@ -21,6 +21,7 @@ a reader can use to find the text again.
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from vericlaim.policy.chunking import CHARS_PER_TOKEN, page_confidence_lookup, split_text
@@ -129,22 +130,30 @@ def chunk_scanned_document(
     chunk_size: int,
     chunk_overlap: int,
     ocr_engine: str | None = None,
+    claim_id: str | None = None,
+    escalated_pages: Collection[int] = (),
 ) -> list[Chunk]:
     """Split an OCR-parsed document into chunks carrying page and OCR provenance.
 
     ``clause_id`` is always ``None``. A scanned inspection report has no clauses, and
     inferring one from OCR text would invent a coordinate that does not exist in the
     source document.
+
+    ``escalated_pages`` are the 1-based pages re-read through the vision tier. The
+    flag travels to the citation, so it is recorded per page rather than per document:
+    a document with one escalated page is not a vision-assisted document.
     """
     character_limit = chunk_size * CHARS_PER_TOKEN
     confidence_for = page_confidence_lookup(document)
     pages = document.pages if document.pages is not None else [document.text]
     page_aware = document.pages is not None
+    escalated = frozenset(escalated_pages)
 
     chunks: list[Chunk] = []
     for page_number, page_text in enumerate(pages, start=1):
         page = page_number if page_aware else None
         confidence = confidence_for(page)
+        was_escalated = page_number in escalated
 
         blocks = _page_blocks(page_text, page)
         if not blocks:
@@ -158,6 +167,8 @@ def chunk_scanned_document(
                     page=page,
                     confidence=0.0,
                     ocr_engine=ocr_engine,
+                    claim_id=claim_id,
+                    escalated=was_escalated,
                 )
             )
             continue
@@ -180,6 +191,8 @@ def chunk_scanned_document(
                         page=page,
                         confidence=confidence,
                         ocr_engine=ocr_engine,
+                        claim_id=claim_id,
+                        escalated=was_escalated,
                     )
                 )
 
@@ -196,6 +209,8 @@ def _chunk(
     page: int | None,
     confidence: float | None,
     ocr_engine: str | None,
+    claim_id: str | None,
+    escalated: bool,
 ) -> Chunk:
     """Build one scanned chunk, numbered by its position in the document."""
     return Chunk(
@@ -208,6 +223,8 @@ def _chunk(
         clause_id=None,
         page=page,
         content_hash=content_hash(text),
+        claim_id=claim_id,
         ocr_confidence=confidence,
         ocr_engine=ocr_engine if confidence is not None else None,
+        escalated=escalated,
     )

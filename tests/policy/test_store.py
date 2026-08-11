@@ -116,6 +116,49 @@ def test_ocr_fields_round_trip(store: ChunkStore, embedder) -> None:
     assert stored.escalated is True
 
 
+def test_the_claim_reference_round_trips(store: ChunkStore, embedder) -> None:
+    """Scoping a search to one matter is a metadata filter, so it must be stored."""
+    original = _chunk(
+        "scanned/CLM-1088_INSPECTION.pdf:0",
+        "Plumber reports a ruptured pipe.",
+        source_type="scanned_pdf",
+        page=2,
+        claim_id="CLM-1088",
+    )
+
+    _add(store, embedder, [original])
+
+    assert store.all_chunks()[0].claim_id == "CLM-1088"
+
+
+def test_search_scopes_to_one_claim(store: ChunkStore, embedder) -> None:
+    """Evidence from another matter is not merely irrelevant, it is misleading."""
+    _add(
+        store,
+        embedder,
+        [
+            _chunk(
+                "scanned/CLM-1001.pdf:0",
+                "The pipe ruptured suddenly at a soldered joint.",
+                source_type="scanned_pdf",
+                claim_id="CLM-1001",
+            ),
+            _chunk(
+                "scanned/CLM-1002.pdf:0",
+                "The pipe has been weeping gradually for several months.",
+                source_type="scanned_pdf",
+                claim_id="CLM-1002",
+            ),
+        ],
+    )
+
+    results = store.search(
+        embedder.embed_query("pipe"), k=5, filters={"claim_id": "CLM-1002"}
+    )
+
+    assert [result.chunk.claim_id for result in results] == ["CLM-1002"]
+
+
 def test_unset_optional_fields_come_back_unset(store: ChunkStore, embedder) -> None:
     _add(store, embedder, [_chunk("policies/a.pdf:0", "Body text.")])
 
@@ -125,6 +168,7 @@ def test_unset_optional_fields_come_back_unset(store: ChunkStore, embedder) -> N
     assert stored.clause_id is None
     assert stored.page is None
     assert stored.ocr_confidence is None
+    assert stored.claim_id is None
     assert stored.escalated is False
 
 

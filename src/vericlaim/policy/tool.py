@@ -9,6 +9,13 @@ The sparse index is loaded lazily and validated against the collection's current
 signature on every use. A BM25 index that has fallen behind returns ids that no longer
 exist; fusing those degrades hybrid retrieval to dense-only with nothing in the logs
 to say so.
+
+Both retrieval sources search the same collection through :class:`ChunkSearcher`, and
+each subclass fixes the three things that must not be left to a caller: which source
+it may see, what its span is called in a trace, and which locator its evidence
+carries. Those three travel together -- a searcher scoped to scanned pages that built
+policy locators would cite somebody's paperwork as a policy clause -- so they are
+settled by construction rather than by argument.
 """
 
 from __future__ import annotations
@@ -30,7 +37,7 @@ from vericlaim.policy.retrieval import (
 from vericlaim.policy.store import ChunkStore
 from vericlaim.tracing import traced
 
-__all__ = ("EmptyIndexError", "PolicySearcher", "search_policy")
+__all__ = ("ChunkSearcher", "EmptyIndexError", "PolicySearcher", "search_policy")
 
 TOOL_NAME = "search_policy"
 
@@ -44,13 +51,21 @@ class EmptyIndexError(RuntimeError):
     """
 
 
-class PolicySearcher:
+class ChunkSearcher:
     """Searches the document collection and returns citable evidence.
 
     Constructed with its dependencies rather than reaching for globals, so a test can
-    supply an in-memory store and a fake embedder, and so C-4 can reuse it for the
-    scanned source by passing a different ``source_type``.
+    supply an in-memory store and a fake embedder.
+
+    Abstract in one respect only: a subclass declares its source and names its tool,
+    and turns a retrieved chunk into evidence carrying the locator that source can be
+    cited by.
     """
+
+    #: The only source this searcher may return. Never overridable by a caller.
+    source_type: RetrievalSourceType
+    #: The tool name recorded in provenance and used as the trace span name.
+    tool_name: str
 
     def __init__(
         self,
@@ -59,15 +74,11 @@ class PolicySearcher:
         *,
         settings: Settings | None = None,
         bm25_path: Path | None = None,
-        source_type: RetrievalSourceType = "policy",
-        tool_name: str = TOOL_NAME,
     ) -> None:
         self._settings = settings if settings is not None else get_settings()
         self._store = store
         self._embedder = embedder if embedder is not None else get_embedder()
         self._bm25_path = bm25_path if bm25_path is not None else self._settings.bm25_dir
-        self._source_type: RetrievalSourceType = source_type
-        self._tool_name = tool_name
         self._sparse: BM25Index | None = None
 
     # ------------------------------------------------------------- sparse index
@@ -100,8 +111,7 @@ class PolicySearcher:
 
     # -------------------------------------------------------------------- search
 
-    @traced(name=TOOL_NAME, run_type="tool")
-    def search(
+    def _search(
         self,
         query: str,
         *,
@@ -112,8 +122,14 @@ class PolicySearcher:
         """Return evidence answering ``query``, most relevant first.
 
         ``filters`` scopes the search by chunk metadata -- a document, a set of
-        documents. The source type is always applied and cannot be overridden, since
-        a policy search returning a scanned page would cite it as a policy clause.
+        documents, one claim. The source type is always applied last and cannot be
+        overridden, since a policy search returning a scanned page would cite it as a
+        policy clause.
+
+        Untraced, so that each subclass's public ``search`` emits exactly one span
+        under its own tool name. Wrapping both would put two spans in the trace for
+        one logical tool call, and against a 5,000-trace monthly budget that
+        duplication is a cost rather than only noise.
         """
         if not query.strip():
             raise ValueError("query must not be empty")
@@ -125,7 +141,7 @@ class PolicySearcher:
             )
 
         settings = self._settings
-        scoped: dict[str, Any] = {**(filters or {}), "source_type": self._source_type}
+        scoped: dict[str, Any] = {**(filters or {}), "source_type": self.source_type}
         mode = settings.retrieval_mode
 
         results = retrieve(
@@ -145,8 +161,33 @@ class PolicySearcher:
             filters=scoped,
         )
 
-        provenance = Provenance(tool=self._tool_name, trace_id=trace_id, query=query)
+        provenance = Provenance(tool=self.tool_name, trace_id=trace_id, query=query)
         return [self._to_evidence(result, provenance) for result in results]
+
+    def _to_evidence(
+        self, result: RetrievedChunk, provenance: Provenance
+    ) -> Evidence:  # pragma: no cover - every subclass overrides this
+        """Convert one retrieved chunk into evidence its source can be cited by."""
+        raise NotImplementedError
+
+
+class PolicySearcher(ChunkSearcher):
+    """Searches indexed policy wordings."""
+
+    source_type: RetrievalSourceType = "policy"
+    tool_name = TOOL_NAME
+
+    @traced(name=TOOL_NAME, run_type="tool")
+    def search(
+        self,
+        query: str,
+        *,
+        filters: dict[str, Any] | None = None,
+        limit: int | None = None,
+        trace_id: str | None = None,
+    ) -> list[Evidence]:
+        """Return policy evidence answering ``query``, most relevant first."""
+        return self._search(query, filters=filters, limit=limit, trace_id=trace_id)
 
     def _to_evidence(self, result: RetrievedChunk, provenance: Provenance) -> Evidence:
         """Convert one retrieved chunk into citable evidence.

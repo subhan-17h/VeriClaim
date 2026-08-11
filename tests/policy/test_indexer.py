@@ -359,3 +359,53 @@ def test_the_committed_policy_corpus_indexes(tmp_path, embedder) -> None:
         "HomeSecure_Plus_2026.pdf",
         "Landlord_Protect_2026.pdf",
     }
+
+
+# ------------------------------------------------------- the processor seam (C-4.6)
+
+
+def test_a_supplied_processor_replaces_parsing_and_chunking(
+    corpus, store, embedder, manifest_path
+) -> None:
+    """The scanned source reuses this loop; only how text is obtained differs."""
+    from vericlaim.policy.indexer import ProcessedDocument
+    from vericlaim.policy.models import Chunk, content_hash
+
+    seen: list[tuple[Path, str]] = []
+
+    def processor(path, doc_id, *, chunk_size, chunk_overlap):
+        seen.append((path, doc_id))
+        text = "Recovered by a different pipeline entirely."
+        return ProcessedDocument(
+            page_count=1,
+            chunks=[
+                Chunk(
+                    id=f"{doc_id}:0",
+                    text=text,
+                    doc_id=doc_id,
+                    doc_name=path.name,
+                    source_type="scanned_pdf",
+                    page=1,
+                    content_hash=content_hash(text),
+                )
+            ],
+        )
+
+    result = _index(corpus, store, embedder, manifest_path, processor=processor)
+
+    assert seen == [(corpus / "wording.txt", "wording.txt")]
+    assert result.chunks_created == 1
+    assert store.all_chunks()[0].source_type == "scanned_pdf"
+
+
+def test_the_zero_chunk_guard_still_covers_a_supplied_processor(
+    corpus, store, embedder, manifest_path
+) -> None:
+    """The guard is the loop's, not the policy chunker's; a silent OCR failure must trip it."""
+    from vericlaim.policy.indexer import ProcessedDocument
+
+    def processor(path, doc_id, *, chunk_size, chunk_overlap):
+        return ProcessedDocument(page_count=4, chunks=[])
+
+    with pytest.raises(ZeroChunkError, match="4 pages"):
+        _index(corpus, store, embedder, manifest_path, processor=processor)

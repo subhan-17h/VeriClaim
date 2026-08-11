@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     # original 0.005 was above every real page and would have classified the entire
     # policy corpus as scanned.
     scanned_char_density_threshold: float = 0.0002
+    # How a scanned document's claim reference is recognised in its corpus-relative
+    # path -- "claims/CLM-1001/estimate.pdf" or "CLM-1088_INSPECTION.pdf". The path,
+    # not the recognised text: a misread character in a document's own heading would
+    # attach its evidence to the wrong matter. Configurable because it encodes a
+    # corpus naming convention rather than anything about OCR.
+    claim_id_pattern: str = r"CLM-\d{3,}"
 
     # --- Chunking ---------------------------------------------------------
     chunk_size: int = 400  # approximate tokens

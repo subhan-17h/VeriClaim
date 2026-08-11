@@ -8,6 +8,13 @@ Two guards exist because the manifest and the collection are separate pieces of 
 that can disagree -- a crash between writing chunks and saving the manifest leaves
 them inconsistent, and an inconsistent index answers questions with a corpus nobody
 can describe. Both are checked before any work, and either triggers a rebuild.
+
+Turning a path into chunks is the one step that differs between the two retrieval
+sources, so it is the one step that is injected. Everything the loop does around it --
+change detection, delete-before-add, the zero-chunk guard, removal of deleted
+documents, the consistency check -- is identical for a policy wording and a scanned
+claim file, and duplicating it for the scanned source would mean maintaining two
+copies of the rules that keep an index honest.
 """
 
 from __future__ import annotations
@@ -15,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from vericlaim.policy.chunking import chunk_document
 from vericlaim.policy.embeddings import Embedder
@@ -25,12 +33,44 @@ from vericlaim.policy.manifest import (
     load_manifest,
     save_manifest,
 )
-from vericlaim.policy.models import RetrievalSourceType
+from vericlaim.policy.models import Chunk, RetrievalSourceType
 from vericlaim.policy.store import ChunkStore
 
-__all__ = ("IndexResult", "ZeroChunkError", "index_corpus")
+__all__ = (
+    "DocumentProcessor",
+    "IndexResult",
+    "ProcessedDocument",
+    "ZeroChunkError",
+    "index_corpus",
+)
 
 ProgressCallback = Callable[[str], None]
+
+
+@dataclass(frozen=True, slots=True)
+class ProcessedDocument:
+    """One document turned into chunks, with the page count that vouches for them.
+
+    ``page_count`` is carried separately rather than derived from the chunks, because
+    the zero-chunk guard exists precisely for the case where there are no chunks to
+    derive anything from.
+    """
+
+    page_count: int | None
+    chunks: list[Chunk]
+
+
+class DocumentProcessor(Protocol):
+    """Turns a document on disk into chunks. The one step that varies by source."""
+
+    def __call__(
+        self,
+        path: Path,
+        doc_id: str,
+        *,
+        chunk_size: int,
+        chunk_overlap: int,
+    ) -> ProcessedDocument: ...
 
 
 class ZeroChunkError(RuntimeError):
@@ -69,13 +109,22 @@ def index_corpus(
     manifest_path: Path,
     chunk_size: int,
     chunk_overlap: int,
+    processor: DocumentProcessor | None = None,
     source_type: RetrievalSourceType = "policy",
     pdf_parser: str | None = None,
     force: bool = False,
     on_progress: ProgressCallback | None = None,
 ) -> IndexResult:
-    """Index every supported document under ``docs_dir`` whose bytes changed."""
+    """Index every supported document under ``docs_dir`` whose bytes changed.
+
+    ``processor`` replaces parsing and chunking wholesale -- it is how the scanned
+    source runs OCR through this loop. ``source_type`` and ``pdf_parser`` configure
+    the default policy processor and have no effect once one is supplied.
+    """
     source_dir = docs_dir.resolve()
+    process = processor if processor is not None else _policy_processor(
+        source_type=source_type, pdf_parser=pdf_parser
+    )
     report = on_progress if on_progress is not None else lambda _message: None
 
     paths_by_id = {
@@ -99,22 +148,14 @@ def index_corpus(
             report(f"Skipped unchanged document: {doc_id}")
             continue
 
-        parser = get_parser(path, pdf_parser=pdf_parser)
-        if parser is None:  # pragma: no cover - iter_document_paths already filtered
-            continue
-
         report(f"Parsing document: {doc_id}")
-        document = parser.parse(path)
-        chunks = chunk_document(
-            document,
-            doc_id=doc_id,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            source_type=source_type,
+        processed = process(
+            path, doc_id, chunk_size=chunk_size, chunk_overlap=chunk_overlap
         )
-        if not chunks and document.page_count:
+        chunks = processed.chunks
+        if not chunks and processed.page_count:
             raise ZeroChunkError(
-                f"{doc_id} has {document.page_count} pages but produced no chunks. "
+                f"{doc_id} has {processed.page_count} pages but produced no chunks. "
                 "The document is in the corpus and would be unsearchable. This is "
                 "usually an image-only PDF reaching a parser that does not run OCR."
             )
@@ -128,7 +169,7 @@ def index_corpus(
         store.add_chunks(chunks, embeddings)
         manifest[doc_id] = ManifestRecord(
             hash=source_hash,
-            page_count=document.page_count,
+            page_count=processed.page_count,
             chunk_count=len(chunks),
         )
         if previous is None:
@@ -153,6 +194,39 @@ def index_corpus(
         skipped=skipped,
         removed=removed,
     )
+
+
+def _policy_processor(
+    *,
+    source_type: RetrievalSourceType,
+    pdf_parser: str | None,
+) -> DocumentProcessor:
+    """Return the default processor: registry parser plus the structural chunker."""
+
+    def process(
+        path: Path,
+        doc_id: str,
+        *,
+        chunk_size: int,
+        chunk_overlap: int,
+    ) -> ProcessedDocument:
+        parser = get_parser(path, pdf_parser=pdf_parser)
+        if parser is None:  # pragma: no cover - iter_document_paths already filtered
+            return ProcessedDocument(page_count=None, chunks=[])
+
+        document = parser.parse(path)
+        return ProcessedDocument(
+            page_count=document.page_count,
+            chunks=chunk_document(
+                document,
+                doc_id=doc_id,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                source_type=source_type,
+            ),
+        )
+
+    return process
 
 
 def _is_inconsistent(manifest: dict[str, ManifestRecord], store: ChunkStore) -> bool:

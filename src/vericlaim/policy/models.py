@@ -92,6 +92,14 @@ class Chunk(BaseModel):
     clause_id: str | None = None
     page: int | None = None
     content_hash: str
+    # Which matter this document belongs to, for scoping a search to one claim.
+    #
+    # Read from the document's path, never from its recognised text: a scanned
+    # inspection report states its own claim reference, but an OCR error in that line
+    # would file the document under a claim it has nothing to do with. The path is
+    # assigned by whoever filed the document and is not a recognition result.
+    # None for policy wordings, which belong to no single claim.
+    claim_id: str | None = None
 
     # --- OCR provenance: None for every policy chunk, populated by C-4 -----
     ocr_confidence: float | None = Field(default=None, ge=0.0, le=1.0)

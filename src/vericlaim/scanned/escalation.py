@@ -172,9 +172,21 @@ def escalate_low_confidence_pages(
         return EscalationOutcome(result=result)
 
     if gateway is None:
-        from vericlaim.gateway import default_gateway
-
-        gateway = default_gateway()
+        gateway = _default_gateway_or_none()
+        if gateway is None:
+            return EscalationOutcome(
+                result=result,
+                escalations=tuple(
+                    PageEscalation(
+                        page=page,
+                        outcome="unavailable",
+                        before_confidence=result.page_confidences[page - 1],
+                        after_confidence=result.page_confidences[page - 1],
+                        detail="No usable model gateway.",
+                    )
+                    for page in candidates
+                ),
+            )
 
     pages = list(result.document.pages or [])
     confidences = list(result.page_confidences)
@@ -208,6 +220,23 @@ def replace_document_text(
             "page_confidences": confidences,
         }
     )
+
+
+def _default_gateway_or_none() -> Any | None:
+    """Return the shared gateway, or None if it cannot be built.
+
+    Construction is a failure mode of its own: an absent API key raises here rather
+    than at call time. Escalation is an improvement, not a requirement, so an
+    unbuildable gateway must degrade exactly as an exhausted quota does -- leaving the
+    original OCR text in place, flagged -- instead of aborting the whole index.
+    """
+    try:
+        from vericlaim.gateway import default_gateway
+
+        return default_gateway()
+    except Exception as exc:  # noqa: BLE001 - a missing key must not abort indexing
+        logger.warning("No model gateway available for vision escalation: %s", exc)
+        return None
 
 
 def _escalate_page(

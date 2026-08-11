@@ -334,3 +334,18 @@ def test_rendering_an_absent_page_raises() -> None:
     """Whatever pypdfium raises, escalation catches it and degrades honestly."""
     with pytest.raises(pdfium.PdfiumError):
         render_page_png(SCANS / "CLM-1001_INSPECTION.pdf", 99)
+
+
+def test_a_gateway_that_cannot_even_be_built_does_not_fail_the_index(monkeypatch) -> None:
+    """A missing key must degrade like an exhausted quota, not abort a whole corpus."""
+    import vericlaim.gateway as gateway_module
+
+    def unbuildable() -> Any:
+        raise RuntimeError("GEMINI_API_KEY is not set")
+
+    monkeypatch.setattr(gateway_module, "default_gateway", unbuildable)
+
+    outcome = escalate_low_confidence_pages(_result(["garbled"], [0.1]))
+
+    assert outcome.result.document.pages == ["garbled"]
+    assert [item.outcome for item in outcome.escalations] == ["unavailable"]

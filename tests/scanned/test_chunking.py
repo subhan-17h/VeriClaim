@@ -259,3 +259,46 @@ def test_the_illegible_scan_yields_one_refusal_grade_chunk() -> None:
     assert len(chunks) == 1
     assert chunks[0].text == UNREADABLE_PAGE_TEXT
     assert chunks[0].ocr_confidence == 0.0
+
+
+# ------------------------------------------------------- claim scoping and escalation
+
+
+def test_every_chunk_carries_the_claim_reference() -> None:
+    """Without it on each chunk, a search cannot be scoped to one matter."""
+    document = _scan("## FINDINGS\n\nThe supply pipe failed beneath the kitchen floor.\n")
+
+    chunks = _chunks(document, claim_id="CLM-1001")
+
+    assert chunks
+    assert all(chunk.claim_id == "CLM-1001" for chunk in chunks)
+
+
+def test_a_document_with_no_claim_reference_carries_none() -> None:
+    document = _scan("## FINDINGS\n\nThe supply pipe failed beneath the kitchen floor.\n")
+
+    assert all(chunk.claim_id is None for chunk in _chunks(document))
+
+
+def test_only_the_escalated_pages_are_marked_escalated() -> None:
+    """The flag reaches the citation, so marking a page it did not apply to misleads."""
+    document = _scan(
+        "First page read cleanly by optical character recognition.",
+        "Second page needed a second reading before it could be used.",
+        confidences=[0.95, 0.80],
+    )
+
+    by_page = {chunk.page: chunk for chunk in _chunks(document, escalated_pages=[2])}
+
+    assert by_page[1].escalated is False
+    assert by_page[2].escalated is True
+
+
+def test_an_unreadable_page_is_not_marked_as_vision_read() -> None:
+    """``escalated`` says this text came from the vision tier; a refusal did not."""
+    document = _scan("", confidences=[0.0])
+
+    chunk = _chunks(document)[0]
+
+    assert chunk.text == UNREADABLE_PAGE_TEXT
+    assert chunk.escalated is False
