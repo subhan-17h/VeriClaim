@@ -1,0 +1,92 @@
+# Hand-authored and reviewed. Statistics blocks are machine-refreshed by
+# `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
+schema: ops
+table: policies
+purpose: >-
+  The contracts of insurance in force and lapsed, one row per policy. A policy links a
+  customer to a product for a period of cover, and carries the money terms - sum insured,
+  deductible, premium - that a claim is settled against.
+columns:
+  - name: policy_id
+    type: bigint
+    meaning: Surrogate key. Referenced by claims.
+  - name: policy_number
+    type: text
+    meaning: The reference quoted to the customer and printed on documents.
+  - name: customer_id
+    type: bigint
+    meaning: The policyholder.
+  - name: product_id
+    type: integer
+    meaning: The product whose wording governs this policy.
+  - name: region_id
+    type: integer
+    meaning: The region the risk sits in.
+  - name: inception_date
+    type: date
+    meaning: The date cover began. A loss before this date is not covered by this policy.
+  - name: expiry_date
+    type: date
+    meaning: The date cover ends.
+  - name: status
+    type: text
+    meaning: >-
+      Administrative state of the policy - active, lapsed or cancelled. A workflow state,
+      not a statement about any claim.
+  - name: sum_insured_pkr
+    type: numeric
+    meaning: >-
+      The maximum payable under this policy for the period of cover. A ceiling, never an
+      amount paid.
+    unit: PKR
+  - name: deductible_pkr
+    type: numeric
+    meaning: >-
+      The amount the insured bears on each claim under this policy. Subtracted from a
+      loss before the insurer pays. This is the policy-specific figure; the product
+      default is ops.coverage_products.base_deductible_pkr.
+    unit: PKR
+  - name: annual_premium_pkr
+    type: numeric
+    meaning: The annual amount the customer pays for cover. Income, not exposure.
+    unit: PKR
+useful_for:
+  - Counting policies in force, by product, region or period.
+  - Finding the terms - sum insured, deductible - that apply to a claim.
+  - Summing premium income by region or product.
+  - Checking whether a date of loss falls inside a policy's period of cover.
+synonyms:
+  - term: policy reference
+    maps_to: policy_number
+  - term: start date
+    maps_to: inception_date
+  - term: renewal date
+    maps_to: expiry_date
+  - term: excess
+    maps_to: deductible_pkr
+  - term: coverage amount
+    maps_to: sum_insured_pkr
+joins:
+  - column: customer_id
+    references: ops.customers.customer_id
+    meaning: The policyholder who bought the policy.
+  - column: product_id
+    references: ops.coverage_products.product_id
+    meaning: The product whose wording governs the policy.
+  - column: region_id
+    references: ops.regions.region_id
+    meaning: The region the insured risk sits in.
+cautions:
+  - >-
+    A deductible is not a limit. deductible_pkr is what the insured bears on each claim
+    and reduces what the insurer pays; sum_insured_pkr is the ceiling on the payout and
+    is never itself paid. Summing sum_insured_pkr measures exposure, not cost.
+  - >-
+    annual_premium_pkr is income and belongs to no claim. Never combine it with claim
+    amounts in one total.
+  - >-
+    A policy's status is administrative. It says nothing about whether any claim under it
+    is payable; that is decided against the policy wording.
+  - >-
+    Cover is a period, not a flag. A policy is in force for a given date when that date
+    is between inception_date and expiry_date, regardless of status today.

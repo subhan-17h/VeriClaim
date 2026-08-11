@@ -1,0 +1,50 @@
+# Hand-authored and reviewed. Statistics blocks are machine-refreshed by
+# `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
+schema: ops
+table: adjusters
+purpose: >-
+  The loss adjusters who handle claims, one row per adjuster. Used to attribute claims to
+  the person handling them and to compare handling across regions and seniority.
+columns:
+  - name: adjuster_id
+    type: integer
+    meaning: Surrogate key. Referenced by claims.
+  - name: adjuster_name
+    type: text
+    meaning: Full name of the adjuster.
+  - name: region_id
+    type: integer
+    meaning: >-
+      The region the adjuster is based in. An adjuster can be assigned claims outside
+      their base region, so this is not the region of their claims.
+  - name: seniority
+    type: text
+    meaning: Grade of the adjuster - junior, senior or lead.
+  - name: is_active
+    type: boolean
+    meaning: >-
+      Whether the adjuster is currently employed. Inactive adjusters still appear on the
+      historical claims they handled.
+useful_for:
+  - Counting or comparing claims by the adjuster handling them.
+  - Grouping claim handling by adjuster seniority.
+  - Listing the adjusters based in a region.
+synonyms:
+  - term: handler
+    maps_to: adjuster_name
+  - term: assessor
+    maps_to: adjuster_name
+  - term: grade
+    maps_to: seniority
+joins:
+  - column: region_id
+    references: ops.regions.region_id
+    meaning: The adjuster's base region.
+cautions:
+  - >-
+    An adjuster's base region is not the region of the claims they handled. Group claims
+    by ops.claims.region_id unless the question is specifically about where staff are
+    based.
+  - >-
+    Excluding inactive adjusters silently drops the historical claims they handled.
+    Filter on is_active only when the question is about current staffing.

@@ -1,0 +1,60 @@
+# Hand-authored and reviewed. Statistics blocks are machine-refreshed by
+# `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
+schema: ops
+table: claim_payments
+purpose: >-
+  The individual payment transactions made on claims, one row per payment. A claim is
+  usually settled in several instalments, so this table is the transaction-level detail
+  behind ops.claims.paid_amount_pkr.
+columns:
+  - name: payment_id
+    type: bigint
+    meaning: Surrogate key.
+  - name: claim_id
+    type: bigint
+    meaning: The claim the payment was made on.
+  - name: payment_date
+    type: date
+    meaning: >-
+      The date the payment was made. Later than the claim's report_date, and unrelated to
+      when the loss occurred.
+  - name: payment_type
+    type: text
+    meaning: >-
+      What the payment was for - indemnity for the loss itself, expense for costs such as
+      adjuster fees, or recovery for money received back, which is recorded as a negative
+      amount.
+  - name: amount_pkr
+    type: numeric
+    meaning: >-
+      The amount of this single payment. Negative for recoveries, so a plain sum is the
+      net figure.
+    unit: PKR
+useful_for:
+  - Tracing how a claim was settled over time.
+  - Splitting claim cost into indemnity and expense.
+  - Counting or summing payments made in a period.
+synonyms:
+  - term: instalment
+    maps_to: amount_pkr
+  - term: settlement date
+    maps_to: payment_date
+  - term: fees
+    maps_to: payment_type
+joins:
+  - column: claim_id
+    references: ops.claims.claim_id
+    meaning: The claim being paid. Every payment belongs to exactly one claim.
+cautions:
+  - >-
+    The sum of payments for a claim reconciles with ops.claims.paid_amount_pkr, not with
+    incurred_amount_pkr, because incurred also includes the outstanding reserve.
+  - >-
+    Recoveries are negative amounts. Filtering to positive rows overstates cost, and
+    summing absolute values overstates it further.
+  - >-
+    payment_date is when money moved. It answers nothing about when the loss occurred or
+    when the claim was reported.
+  - >-
+    A claim with no payments has no rows here. Counting claims through this table silently
+    drops every claim that has not been paid yet.

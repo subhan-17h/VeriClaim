@@ -1,0 +1,145 @@
+# Hand-authored and reviewed. Statistics blocks are machine-refreshed by
+# `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
+schema: ops
+table: claims
+purpose: >-
+  Every claim reported against a policy, one row per claim. This is the central table of
+  the operational database: claim volumes, perils, regional patterns and cost all come
+  from here. It carries two different dates and three different money columns, and
+  choosing the wrong one of either produces a plausible answer to a different question.
+columns:
+  - name: claim_id
+    type: bigint
+    meaning: Surrogate key. Referenced by claim_payments.
+  - name: claim_number
+    type: text
+    meaning: >-
+      The external claim reference, formatted CLM-1234. This is the reference printed on
+      the scanned inspection reports, plumber invoices and claim forms, so it is the join
+      between this database and the scanned document source.
+  - name: policy_id
+    type: bigint
+    meaning: The policy the claim was made against.
+  - name: adjuster_id
+    type: integer
+    meaning: The adjuster handling the claim. Null while a claim is unassigned.
+  - name: region_id
+    type: integer
+    meaning: >-
+      The region the loss occurred in. This is the region to group claims by; the
+      adjuster's base region is a different thing.
+  - name: peril
+    type: text
+    meaning: >-
+      The cause of loss as classified at first notification - for example water_damage,
+      fire, theft, storm, impact or liability. Classified from what was reported, and a
+      later investigation may contradict it.
+  - name: date_of_loss
+    type: date
+    meaning: >-
+      The date the damage actually occurred. Use this for questions about when losses
+      happened, exposure periods, and whether the loss fell inside the period of cover.
+  - name: report_date
+    type: date
+    meaning: >-
+      The date the claim was notified to NorthStar. Use this for questions about claim
+      volume, workload and reporting trends. Always on or after date_of_loss.
+  - name: closed_date
+    type: date
+    meaning: The date the claim was closed. Null while the claim is open.
+  - name: status
+    type: text
+    meaning: >-
+      Workflow state of the claim file - open, closed, reopened, denied or withdrawn. An
+      administrative state recorded by the claims team, not a coverage decision this
+      system may assert or infer.
+  - name: cause_description
+    type: text
+    meaning: >-
+      Free-text description of the loss as recorded at notification, for example "escape
+      of water from a burst pipe under the kitchen sink". Useful for distinguishing a
+      sudden event from gradual damage, but it is a summary written by staff, not
+      evidence in itself.
+  - name: incurred_amount_pkr
+    type: numeric
+    meaning: >-
+      The estimated ultimate cost of the claim - what NorthStar expects the claim to cost
+      in total, whether or not it has been paid yet. The right column for cost, exposure
+      and severity questions.
+    unit: PKR
+  - name: paid_amount_pkr
+    type: numeric
+    meaning: >-
+      Cash actually paid out on the claim so far. The right column for questions about
+      money that has left the business. Always less than or equal to incurred.
+    unit: PKR
+  - name: reserve_amount_pkr
+    type: numeric
+    meaning: >-
+      The amount still set aside to meet the remaining cost of the claim. Incurred is
+      paid plus reserve.
+    unit: PKR
+  - name: deductible_applied_pkr
+    type: numeric
+    meaning: >-
+      The deductible actually applied when settling this claim, taken from the policy
+      terms. Already reflected in paid_amount_pkr; do not subtract it again.
+    unit: PKR
+useful_for:
+  - Counting claims reported in a period, by region, peril or product.
+  - Measuring claim cost, either incurred or paid, by any of those groupings.
+  - Comparing when losses occurred against when they were reported.
+  - Finding the claims a scanned inspection report or invoice belongs to.
+  - Identifying claims whose recorded cause suggests a sudden event or gradual damage.
+synonyms:
+  - term: claim reference
+    maps_to: claim_number
+  - term: claim number
+    maps_to: claim_number
+  - term: filed
+    maps_to: report_date
+  - term: notified
+    maps_to: report_date
+  - term: loss date
+    maps_to: date_of_loss
+  - term: cause of loss
+    maps_to: peril
+  - term: cost
+    maps_to: incurred_amount_pkr
+  - term: settled amount
+    maps_to: paid_amount_pkr
+  - term: outstanding
+    maps_to: reserve_amount_pkr
+joins:
+  - column: policy_id
+    references: ops.policies.policy_id
+    meaning: >-
+      The policy claimed against. Needed for the product, the deductible and the sum
+      insured that apply.
+  - column: adjuster_id
+    references: ops.adjusters.adjuster_id
+    meaning: The adjuster handling the claim. Nullable, so an inner join drops unassigned claims.
+  - column: region_id
+    references: ops.regions.region_id
+    meaning: The region the loss occurred in.
+cautions:
+  - >-
+    date_of_loss and report_date are different questions. "Claims filed in March" means
+    report_date; "losses that occurred in March" means date_of_loss. The two diverge
+    whenever reporting is delayed, which is exactly when the difference matters.
+  - >-
+    incurred_amount_pkr, paid_amount_pkr and reserve_amount_pkr are three different
+    quantities. Incurred is the expected ultimate cost, paid is cash already out, reserve
+    is what remains set aside, and incurred equals paid plus reserve. Summing more than
+    one of them together double counts.
+  - >-
+    A claim's status is a workflow state, not a coverage determination. A denied or
+    withdrawn claim must never be reported as a decision this system reached, and a
+    closed claim is not an approved one.
+  - >-
+    peril and cause_description record what was reported at notification. A scanned
+    inspection report may describe a different cause; where they disagree, both should be
+    reported rather than one silently preferred.
+  - >-
+    An inner join to adjusters drops claims with no adjuster assigned. Use a left join
+    unless the question is specifically about assigned claims.

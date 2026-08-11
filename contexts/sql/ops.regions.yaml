@@ -1,0 +1,40 @@
+# Hand-authored and reviewed. Statistics blocks are machine-refreshed by
+# `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
+schema: ops
+table: regions
+purpose: >-
+  The operating regions NorthStar writes business in. One row per region. Regions are the
+  unit almost every management question aggregates by, and the same names appear in the
+  quarterly spreadsheets, so this table is what ties the two sources together.
+columns:
+  - name: region_id
+    type: integer
+    meaning: Surrogate key. Referenced by policies, claims, customers and adjusters.
+  - name: region_name
+    type: text
+    meaning: >-
+      Display name of the region, for example "Lahore Central". This is the exact string
+      the quarterly spreadsheets use in their region column, so it is the join key
+      between the database and the spreadsheet source.
+  - name: city
+    type: text
+    meaning: Principal city of the region - Lahore, Karachi or Islamabad.
+  - name: province
+    type: text
+    meaning: Province the region sits in.
+useful_for:
+  - Grouping claims, policies or premium by region.
+  - Resolving a region named in a question to the region_id the other tables use.
+  - Reconciling a region named in a spreadsheet with the transactional database.
+synonyms:
+  - term: area
+    maps_to: region_name
+  - term: branch
+    maps_to: region_name
+  - term: territory
+    maps_to: region_name
+cautions:
+  - >-
+    Region names are also used verbatim in the spreadsheet source. When a question spans
+    both, match on region_name rather than region_id, because the spreadsheets carry no
+    identifiers.

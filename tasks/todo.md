@@ -103,7 +103,8 @@ confidence and cites by page; CSRS's silent zero-chunk path proven closed by tes
 - [x] **C-5.2** `sql/db.py` — psycopg3 with **connection pooling** + statement timeout. — `A` unibot
 - [x] **C-5.3** `sql/validator.py` — the AST safety layer, **near-verbatim**; deliberately relax the
       `exp.Select` gate to admit `UNION`/`INTERSECT`/`EXCEPT`. — `V` unibot
-- [ ] **C-5.4** `sql/contexts/*.yaml` + loader + profiler, authored for insurance. — `V` pattern
+- [x] **C-5.4** `sql/contexts/*.yaml` + loader + profiler, authored for insurance. — `V` pattern
+      (YAML lives at `contexts/sql/`; a module and a package cannot share `sql/contexts`.)
 - [ ] **C-5.5** `sql/resolver.py` + `values_catalog.py` — insurer noise tokens, claim-number fast
       path, **generation-keyed cache** replacing the un-invalidated global. — `A` unibot
 - [ ] **C-5.6** `sql/planner.py` + `generator.py` — structure kept, **all academic prompts

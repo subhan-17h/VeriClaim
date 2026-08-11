@@ -1,0 +1,57 @@
+# Hand-authored and reviewed. Statistics blocks are machine-refreshed by
+# `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
+schema: ops
+table: customers
+purpose: >-
+  The policyholders, both individuals and businesses. One row per customer. A customer
+  may hold several policies over time, so customer counts and policy counts are not
+  interchangeable.
+columns:
+  - name: customer_id
+    type: bigint
+    meaning: Surrogate key. Referenced by policies.
+  - name: customer_name
+    type: text
+    meaning: >-
+      Full name for an individual, or registered business name for a commercial
+      policyholder. Business names carry suffixes such as "Pvt Ltd" that a question will
+      usually omit.
+  - name: customer_type
+    type: text
+    meaning: Whether the policyholder is an individual or a business.
+  - name: city
+    type: text
+    meaning: City of the customer's correspondence address.
+  - name: region_id
+    type: integer
+    meaning: The region servicing this customer.
+  - name: email
+    type: text
+    meaning: Contact address. Not a reliable identity key - it may be shared or absent.
+  - name: created_at
+    type: timestamp without time zone
+    meaning: When the customer record was opened. Not the inception date of any policy.
+useful_for:
+  - Counting policyholders, split by individual versus business.
+  - Finding the policies and claims belonging to a named customer.
+  - Grouping customers by region or city.
+synonyms:
+  - term: policyholder
+    maps_to: customer_name
+  - term: insured
+    maps_to: customer_name
+  - term: client
+    maps_to: customer_name
+  - term: account opened
+    maps_to: created_at
+joins:
+  - column: region_id
+    references: ops.regions.region_id
+    meaning: The region servicing the customer. May differ from the region of a claim.
+cautions:
+  - >-
+    created_at is when the customer relationship began, not when cover began. Questions
+    about when someone became insured are about ops.policies.inception_date.
+  - >-
+    One customer can hold many policies. Counting rows here answers "how many
+    policyholders", never "how many policies".

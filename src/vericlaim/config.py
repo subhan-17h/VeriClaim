@@ -156,6 +156,12 @@ class Settings(BaseSettings):
     # How long the pool tries to establish itself before declaring the database down.
     pg_connect_timeout_s: float = 5.0
 
+    # --- Schema contexts --------------------------------------------------
+    # Reviewed, committed descriptions of what each table means. Kept at the repository
+    # root rather than inside the package because they are human-reviewed artefacts that
+    # get read in diffs, and because the sheets contexts sit beside them.
+    sql_context_dir: Path = PROJECT_ROOT / "contexts" / "sql"
+
     # --- SQL safety -------------------------------------------------------
     sql_row_limit: int = 500
     sql_statement_timeout_ms: int = 10_000

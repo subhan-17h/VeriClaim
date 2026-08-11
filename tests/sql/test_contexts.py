@@ -1,0 +1,300 @@
+"""Schema contexts: what the planner is told the database means.
+
+A context is the reviewed, committed description of one table -- its purpose, its columns
+and what they mean, its join keys, and the distinctions that make a query wrong in a way
+that still returns a plausible number. Statistics are machine-refreshed; the semantics are
+hand-authored, because no profiler can infer that `incurred_amount_pkr` is an estimate of
+ultimate cost while `paid_amount_pkr` is cash already out the door.
+
+This file tests the loader and the invariants. The committed content is checked in
+test_context_content.py.
+"""
+
+from __future__ import annotations
+
+import textwrap
+from pathlib import Path
+
+import pytest
+
+from vericlaim.sql.contexts import (
+    ContextError,
+    allow_list,
+    context_summary,
+    load_contexts,
+)
+
+CLAIMS_YAML = """
+schema: ops
+table: claims
+purpose: One row per reported claim.
+columns:
+  - name: claim_id
+    type: bigint
+    meaning: Surrogate key.
+  - name: claim_number
+    type: text
+    meaning: The reference printed on scanned paperwork.
+  - name: policy_id
+    type: bigint
+    meaning: The policy this claim was made against.
+  - name: incurred_amount_pkr
+    type: numeric
+    meaning: Estimated ultimate cost.
+    unit: PKR
+useful_for:
+  - How many claims were reported in a period.
+synonyms:
+  - term: claim reference
+    maps_to: claim_number
+joins:
+  - column: policy_id
+    references: ops.policies.policy_id
+    meaning: Each claim belongs to exactly one policy.
+cautions:
+  - Incurred is not paid.
+"""
+
+POLICIES_YAML = """
+schema: ops
+table: policies
+purpose: One row per policy.
+columns:
+  - name: policy_id
+    type: bigint
+    meaning: Surrogate key.
+  - name: deductible_pkr
+    type: numeric
+    meaning: Borne by the insured per claim.
+    unit: PKR
+useful_for:
+  - Which product a claim was covered under.
+"""
+
+
+@pytest.fixture
+def context_dir(tmp_path: Path) -> Path:
+    (tmp_path / "ops.claims.yaml").write_text(textwrap.dedent(CLAIMS_YAML), encoding="utf-8")
+    (tmp_path / "ops.policies.yaml").write_text(textwrap.dedent(POLICIES_YAML), encoding="utf-8")
+    return tmp_path
+
+
+def write(directory: Path, name: str, body: str) -> Path:
+    path = directory / name
+    path.write_text(textwrap.dedent(body), encoding="utf-8")
+    return path
+
+
+# ------------------------------------------------------------------ loading
+
+
+def test_contexts_are_keyed_by_qualified_name(context_dir) -> None:
+    """Bare table names collide across schemas; ops.regions and sheets.regions are two
+    different tables."""
+    contexts = load_contexts(context_dir)
+
+    assert set(contexts) == {"ops.claims", "ops.policies"}
+
+
+def test_a_context_carries_its_columns_in_order(context_dir) -> None:
+    claims = load_contexts(context_dir)["ops.claims"]
+
+    assert [column.name for column in claims.columns][:2] == ["claim_id", "claim_number"]
+    assert claims.columns[1].meaning.startswith("The reference")
+
+
+def test_a_money_column_declares_its_unit(context_dir) -> None:
+    """PKR is the corpus currency; an amount whose unit is a guess is a wrong answer
+    waiting to be formatted."""
+    claims = load_contexts(context_dir)["ops.claims"]
+    incurred = next(column for column in claims.columns if column.name == "incurred_amount_pkr")
+
+    assert incurred.unit == "PKR"
+
+
+def test_an_empty_directory_is_an_error(tmp_path) -> None:
+    """Failing closed: an empty allow-list would otherwise silently answer nothing."""
+    with pytest.raises(ContextError):
+        load_contexts(tmp_path)
+
+
+def test_a_duplicate_table_is_an_error(context_dir) -> None:
+    write(context_dir, "duplicate.yaml", CLAIMS_YAML)
+
+    with pytest.raises(ContextError, match="ops.claims"):
+        load_contexts(context_dir)
+
+
+def test_a_context_without_columns_is_an_error(context_dir) -> None:
+    write(context_dir, "ops.empty.yaml", "schema: ops\ntable: empty\npurpose: x\ncolumns: []\n")
+
+    with pytest.raises(ContextError, match="columns"):
+        load_contexts(context_dir)
+
+
+def test_a_column_without_a_meaning_is_an_error(context_dir) -> None:
+    """The meaning is the only reason a context exists; a name alone is already in the
+    database."""
+    write(
+        context_dir,
+        "ops.bare.yaml",
+        """
+        schema: ops
+        table: bare
+        purpose: x
+        columns:
+          - name: id
+            type: bigint
+        """,
+    )
+
+    with pytest.raises(ContextError, match="meaning"):
+        load_contexts(context_dir)
+
+
+def test_a_synonym_for_an_unknown_column_is_an_error(context_dir) -> None:
+    """A synonym pointing at nothing sends the generator after a column that does not
+    exist, and the failure would surface as invalid SQL instead."""
+    write(
+        context_dir,
+        "ops.bad_synonym.yaml",
+        """
+        schema: ops
+        table: bad_synonym
+        purpose: x
+        columns:
+          - name: id
+            type: bigint
+            meaning: Surrogate key.
+        synonyms:
+          - term: reference
+            maps_to: no_such_column
+        """,
+    )
+
+    with pytest.raises(ContextError, match="no_such_column"):
+        load_contexts(context_dir)
+
+
+def test_a_join_to_an_undocumented_table_is_an_error(context_dir) -> None:
+    """Checked across files: a join is only usable if the target is also described."""
+    write(
+        context_dir,
+        "ops.orphan.yaml",
+        """
+        schema: ops
+        table: orphan
+        purpose: x
+        columns:
+          - name: ghost_id
+            type: bigint
+            meaning: Points nowhere.
+        joins:
+          - column: ghost_id
+            references: ops.ghosts.ghost_id
+            meaning: Dangling.
+        """,
+    )
+
+    with pytest.raises(ContextError, match="ops.ghosts"):
+        load_contexts(context_dir)
+
+
+def test_a_join_from_an_unknown_local_column_is_an_error(context_dir) -> None:
+    write(
+        context_dir,
+        "ops.bad_join.yaml",
+        """
+        schema: ops
+        table: bad_join
+        purpose: x
+        columns:
+          - name: id
+            type: bigint
+            meaning: Surrogate key.
+        joins:
+          - column: missing_id
+            references: ops.policies.policy_id
+            meaning: Wrong local column.
+        """,
+    )
+
+    with pytest.raises(ContextError, match="missing_id"):
+        load_contexts(context_dir)
+
+
+def test_malformed_yaml_names_the_file(context_dir) -> None:
+    write(context_dir, "broken.yaml", "schema: ops\ntable: [unclosed\n")
+
+    with pytest.raises(ContextError, match="broken.yaml"):
+        load_contexts(context_dir)
+
+
+# ------------------------------------------------- the seam into the validator
+
+
+def test_the_allow_list_carries_schema_table_and_columns(context_dir) -> None:
+    """This is the only path by which a table becomes queryable."""
+    contexts = load_contexts(context_dir)
+
+    allowed = allow_list(contexts, ["ops.claims"])
+
+    assert [entry.qualified for entry in allowed] == ["ops.claims"]
+    assert "claim_number" in allowed[0].columns
+
+
+def test_selecting_an_unknown_table_is_an_error(context_dir) -> None:
+    """Silently dropping it would produce an allow-list that quietly excludes the table
+    the planner intended to read."""
+    contexts = load_contexts(context_dir)
+
+    with pytest.raises(ContextError, match="ops.nope"):
+        allow_list(contexts, ["ops.nope"])
+
+
+def test_selecting_nothing_yields_nothing(context_dir) -> None:
+    contexts = load_contexts(context_dir)
+
+    assert allow_list(contexts, []) == ()
+
+
+def test_the_allow_list_feeds_the_validator(context_dir) -> None:
+    """The two halves are only useful joined: contexts decide what SQL may touch."""
+    from vericlaim.sql.validator import validate_sql
+
+    contexts = load_contexts(context_dir)
+    allowed = allow_list(contexts, ["ops.claims"])
+
+    accepted = validate_sql("SELECT claim_number FROM ops.claims", allowed, 50)
+    refused = validate_sql("SELECT policy_id FROM ops.policies", allowed, 50)
+
+    assert accepted.ok, accepted.reason
+    assert not refused.ok
+    assert "policies" in refused.reason
+
+
+# ------------------------------------------------------------------- routing
+
+
+def test_the_summary_keeps_what_routing_needs(context_dir) -> None:
+    summary = context_summary(load_contexts(context_dir)["ops.claims"])
+
+    assert summary["table"] == "ops.claims"
+    assert summary["purpose"]
+    assert summary["useful_for"]
+    assert [column["name"] for column in summary["columns"]][0] == "claim_id"
+
+
+def test_the_summary_drops_bulky_sample_values(context_dir) -> None:
+    """Every context is shown to the router on every question; samples would dominate
+    the prompt without changing which source is chosen."""
+    summary = context_summary(load_contexts(context_dir)["ops.claims"])
+
+    assert all("sample_values" not in column for column in summary["columns"])
+
+
+def test_the_summary_keeps_the_cautions(context_dir) -> None:
+    """The distinctions that make a query wrong are the point, not decoration."""
+    summary = context_summary(load_contexts(context_dir)["ops.claims"])
+
+    assert summary["cautions"] == ["Incurred is not paid."]
