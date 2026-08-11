@@ -206,10 +206,10 @@ def test_source_type_is_selectable_for_the_scanned_path() -> None:
 
     chunks = chunk_document(
         document, doc_id="scanned/a.pdf", chunk_size=400, chunk_overlap=60,
-        source_type="scanned",
+        source_type="scanned_pdf",
     )
 
-    assert all(chunk.source_type == "scanned" for chunk in chunks)
+    assert all(chunk.source_type == "scanned_pdf" for chunk in chunks)
 
 
 def test_embed_text_prepends_the_breadcrumb() -> None:
@@ -333,3 +333,12 @@ def test_both_pdf_parsers_chunk_the_same_wording_alike() -> None:
         return {chunk.clause_id: chunk.page for chunk in chunks if chunk.clause_id}
 
     assert clause_pages(docling) == clause_pages(pypdf)
+
+
+def test_list_markers_do_not_leak_into_chunk_text() -> None:
+    """Evidence.content is quoted verbatim into a cited answer; exporter syntax is not."""
+    document = _document("## SECTION 4 - WATER DAMAGE\n\n- 4.2 Sudden and accidental escape.\n")
+
+    chunk = next(c for c in _chunks(document) if c.clause_id == "4.2")
+
+    assert chunk.text.lstrip().startswith("4.2 Sudden")

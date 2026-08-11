@@ -210,7 +210,11 @@ def _document_blocks(document: Document) -> list[_Block]:
             while headings and headings[-1][0] >= depth:
                 headings.pop()
             headings.append(heading)
-            lines = [line]
+            # The heading line opens the next block, with its Markdown list marker
+            # removed. Evidence.content is quoted verbatim into a cited answer, so a
+            # stray "- " in front of a policy clause is exporter syntax leaking
+            # through the data layer into something a reader sees.
+            lines = [_LIST_MARKER_PATTERN.sub("", line)]
             snapshot = tuple(headings)
             clause_id = _nearest_clause(headings)
 

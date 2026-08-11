@@ -162,7 +162,7 @@ def test_sparse_results_are_scoped_by_source_type() -> None:
         _chunk(
             "scanned/CLM-1.pdf:0",
             "Escape of water from a fixed plumbing system observed on site.",
-            source_type="scanned",
+            source_type="scanned_pdf",
         ),
     ]
 
@@ -185,7 +185,7 @@ def test_sparse_results_are_scoped_by_document(chunks: list[Chunk]) -> None:
 
 def test_a_list_filter_matches_any_value(chunks: list[Chunk]) -> None:
     results = BM25Index.build(chunks).search(
-        "insured water", k=10, filters={"source_type": ["policy", "scanned"]}
+        "insured water", k=10, filters={"source_type": ["policy", "scanned_pdf"]}
     )
 
     assert results
@@ -215,12 +215,12 @@ def test_filters_survive_persistence(tmp_path: Path) -> None:
     BM25Index.build(
         [
             _chunk("policies/a.pdf:0", "Escape of water is covered."),
-            _chunk("scanned/b.pdf:0", "Escape of water was observed.", source_type="scanned"),
+            _chunk("scanned/b.pdf:0", "Escape of water was observed.", source_type="scanned_pdf"),
         ]
     ).save(path)
 
     results = BM25Index.load(path).search(
-        "escape of water", k=10, filters={"source_type": "scanned"}
+        "escape of water", k=10, filters={"source_type": "scanned_pdf"}
     )
 
     assert [chunk_id for chunk_id, _ in results] == ["scanned/b.pdf:0"]
@@ -341,7 +341,7 @@ def test_hybrid_search_filters_both_legs(tmp_path, embedder) -> None:
         _chunk(
             "scanned/CLM-1.pdf:0",
             "Escape of water from a fixed plumbing system was observed on site.",
-            source_type="scanned",
+            source_type="scanned_pdf",
         ),
     ]
     store = ChunkStore(path=tmp_path / "chroma", collection_name="test")

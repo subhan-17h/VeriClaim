@@ -101,7 +101,7 @@ def test_ocr_fields_round_trip(store: ChunkStore, embedder) -> None:
         "Plumber reports a ruptured pipe.",
         doc_id="scanned/CLM-1088.pdf",
         doc_name="CLM-1088.pdf",
-        source_type="scanned",
+        source_type="scanned_pdf",
         page=2,
         ocr_confidence=0.91,
         ocr_engine="rapidocr",
@@ -237,7 +237,7 @@ def test_search_scopes_by_source_type(store: ChunkStore, embedder) -> None:
                 "Escape of water observed at the property during inspection.",
                 doc_id="scanned/CLM-1.pdf",
                 doc_name="CLM-1.pdf",
-                source_type="scanned",
+                source_type="scanned_pdf",
             ),
         ],
     )
@@ -305,12 +305,12 @@ def test_all_chunks_can_be_filtered(store: ChunkStore, embedder) -> None:
                 "Scanned text.",
                 doc_id="scanned/b.pdf",
                 doc_name="b.pdf",
-                source_type="scanned",
+                source_type="scanned_pdf",
             ),
         ],
     )
 
-    assert len(store.all_chunks(filters={"source_type": "scanned"})) == 1
+    assert len(store.all_chunks(filters={"source_type": "scanned_pdf"})) == 1
 
 
 def test_chunks_with_embeddings_returns_the_stored_vectors(

@@ -34,7 +34,11 @@ __all__ = (
 
 # The subset of vericlaim.evidence.SourceType that is served from the vector store.
 # SQL and spreadsheets are queried, not retrieved, so they never produce a Chunk.
-RetrievalSourceType = Literal["policy", "scanned"]
+#
+# These are deliberately the same string values the Evidence contract uses, so a
+# chunk's source_type passes straight through to its Evidence with no translation
+# table in between -- one fewer place for the two to drift out of agreement.
+RetrievalSourceType = Literal["policy", "scanned_pdf"]
 
 
 def content_hash(text: str) -> str:
