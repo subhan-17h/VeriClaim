@@ -298,6 +298,25 @@ def split_text(text: str, chunk_size: int, overlap: int) -> list[str]:
     return chunks
 
 
+def page_confidence_lookup(document: Document) -> Callable[[int | None], float | None]:
+    """Return a lookup from 1-based page number to that page's OCR confidence.
+
+    Bounds-checked rather than indexed directly. The confidence list is aligned
+    positionally with the page list, and an off-by-one here would attach one page's
+    confidence to another page's text -- reporting a clean page as unreadable, or
+    worse, an unreadable one as clean.
+    """
+    confidences = document.page_confidences
+
+    def lookup(page: int | None) -> float | None:
+        if confidences is None or page is None:
+            return None
+        index = page - 1
+        return confidences[index] if 0 <= index < len(confidences) else None
+
+    return lookup
+
+
 def chunk_document(
     document: Document,
     *,
@@ -305,14 +324,21 @@ def chunk_document(
     chunk_size: int,
     chunk_overlap: int,
     source_type: RetrievalSourceType = "policy",
+    ocr_engine: str | None = None,
 ) -> list[Chunk]:
     """Split a document at structural boundaries and populate Chunk metadata.
 
     ``doc_id`` is the corpus-relative path and is supplied by the indexer, which is
     the only component that knows the corpus root. It prefixes every chunk id, so two
     documents sharing a basename in different directories never collide.
+
+    When the document carries per-page OCR confidence, every chunk inherits its
+    page's score. Confidence has to travel at chunk granularity because that is the
+    granularity evidence is cited at: a document-level average would let a clean page
+    vouch for an unreadable one in the same file.
     """
     character_limit = chunk_size * CHARS_PER_TOKEN
+    confidence_for = page_confidence_lookup(document)
     chunks: list[Chunk] = []
 
     for block in _document_blocks(document):
@@ -326,6 +352,7 @@ def chunk_document(
             if block.headings
             else None
         )
+        confidence = confidence_for(block.page)
         for text in texts:
             chunks.append(
                 Chunk(
@@ -338,6 +365,8 @@ def chunk_document(
                     clause_id=block.clause_id,
                     page=block.page,
                     content_hash=content_hash(text),
+                    ocr_confidence=confidence,
+                    ocr_engine=ocr_engine if confidence is not None else None,
                 )
             )
 
