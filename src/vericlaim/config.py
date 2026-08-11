@@ -145,6 +145,16 @@ class Settings(BaseSettings):
     pg_readonly_password_env: str = "READONLY_PASSWORD"
     ops_schema: str = "ops"
     sheets_schema: str = "sheets"
+    # Connection pooling. A question fans out over several sources concurrently, and
+    # opening a connection per query would put TCP and authentication latency on the
+    # critical path of every one of them.
+    pg_pool_min_size: int = 1
+    pg_pool_max_size: int = 4
+    # How long a caller waits for a free connection before giving up. Bounded so an
+    # exhausted pool surfaces as an error rather than as a request that never returns.
+    pg_pool_acquire_timeout_s: float = 10.0
+    # How long the pool tries to establish itself before declaring the database down.
+    pg_connect_timeout_s: float = 5.0
 
     # --- SQL safety -------------------------------------------------------
     sql_row_limit: int = 500
