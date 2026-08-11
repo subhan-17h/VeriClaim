@@ -78,7 +78,14 @@ class Chunk(BaseModel):
     # The basename, carried for display and citation only. Never an identity key.
     doc_name: str
     source_type: RetrievalSourceType
+    # The full structural breadcrumb, e.g.
+    # "HomeSecure_Plus_2026.pdf > SECTION 4 WATER DAMAGE > 4.2 Sudden and accidental".
     section: str | None = None
+    # The innermost structural identifier alone -- "4.2", "SECTION 4", "COVERAGE A".
+    # Carried separately from the breadcrumb because "cite the clause" is then an
+    # equality check rather than a substring search, which is what lets C-11 score
+    # clause-level citation accuracy deterministically.
+    clause_id: str | None = None
     page: int | None = None
     content_hash: str
 
