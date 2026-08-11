@@ -101,7 +101,7 @@ confidence and cites by page; CSRS's silent zero-chunk path proven closed by tes
 - [x] **C-5.1** `docker-compose.yml` (postgres:16, port 5435) + `init.sql` read-only role +
       `smoke.py` asserting `InsufficientPrivilege`. — `V` unibot
 - [x] **C-5.2** `sql/db.py` — psycopg3 with **connection pooling** + statement timeout. — `A` unibot
-- [ ] **C-5.3** `sql/validator.py` — the AST safety layer, **near-verbatim**; deliberately relax the
+- [x] **C-5.3** `sql/validator.py` — the AST safety layer, **near-verbatim**; deliberately relax the
       `exp.Select` gate to admit `UNION`/`INTERSECT`/`EXCEPT`. — `V` unibot
 - [ ] **C-5.4** `sql/contexts/*.yaml` + loader + profiler, authored for insurance. — `V` pattern
 - [ ] **C-5.5** `sql/resolver.py` + `values_catalog.py` — insurer noise tokens, claim-number fast
