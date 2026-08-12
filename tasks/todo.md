@@ -143,8 +143,10 @@ test rejects **before** execution.
 
 - [x] **C-6.1** `sheets/profiler.py` — merged ranges, stacked headers, TOTAL footers, multi-table
       sheets, sentinels, currency/percent formats. — `N`
-- [ ] **C-6.2** `sheets/ingest.py` — `sheets.*` schema with `_workbook`/`_sheet`/`_row`/`_a1_range`
+- [x] **C-6.2** `sheets/ingest.py` — `sheets.*` schema with `_workbook`/`_sheet`/`_row`/`_a1_range`
       lineage; non-destructive generation-tagged ingest. — `A` unibot header detection, rest `N`
+      (Non-destructive means **atomic**: the new table is built beside the old one and swapped
+      in, so a load that falls over half way leaves the previous data untouched.)
 - [x] **C-6.3** Type coercion — currency, percent, separators, NULL sentinels, mixed columns. — `N`
       (Built before C-6.2, which uses it: a commit that does not work on its own is not a
       reviewable increment.)
