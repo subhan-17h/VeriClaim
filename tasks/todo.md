@@ -153,7 +153,9 @@ test rejects **before** execution.
 - [x] **C-6.4** `contexts/sheets/*.yaml` + spreadsheet-aware `SchemaContext`. — `V` pattern
       (A context declaring a `workbook` gets the five lineage columns injected on load, so the
       allow-list permits the very columns a citation is built from and six files cannot drift.)
-- [ ] **C-6.5** `sheets/tool.py` — shared validator/executor, `SpreadsheetLocator` from lineage. — `N`
+- [x] **C-6.5** `sheets/tool.py` — shared validator/executor, `SpreadsheetLocator` from lineage. — `N`
+      (Evidence is **per row**, not per query: a citation naming only the table would be no
+      better than SQL. An aggregate cites the sheet rather than inventing a row.)
 
 **Acceptance:** a spreadsheet answer cites workbook › sheet › row › A1, and that range genuinely
 contains the value in the source `.xlsx`.

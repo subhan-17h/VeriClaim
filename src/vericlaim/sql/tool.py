@@ -25,13 +25,18 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from vericlaim.config import Settings, get_settings
 from vericlaim.evidence import Evidence, Provenance, SqlLocator
 from vericlaim.sql.contexts import ContextError, SchemaContext, load_contexts
 from vericlaim.sql.observer import ExecutionResult
-from vericlaim.sql.pipeline import Executor, StepOutcome, run_pipeline
+from vericlaim.sql.pipeline import (
+    Executor,
+    PipelineOutcome,
+    StepOutcome,
+    run_pipeline,
+)
 from vericlaim.sql.planner import PlanError, plan_query
 from vericlaim.sql.resolver import EntityResolution, resolve_entities
 from vericlaim.sql.values_catalog import Catalog
@@ -91,6 +96,10 @@ class ClaimsQuerier:
     settings: Settings
     gateway: Any | None = None
 
+    # Named on the class so a source that shares this machinery -- the spreadsheets do,
+    # through the same validator and executor -- is not mislabelled in its own provenance.
+    tool_name: ClassVar[str] = TOOL_NAME
+
     @traced(name="query_claims_db", run_type="tool")
     def query(
         self,
@@ -100,7 +109,21 @@ class ClaimsQuerier:
         tables: Sequence[str] | None = None,
         trace_id: str | None = None,
     ) -> list[Evidence]:
-        """Answer one question and return one piece of evidence per plan step."""
+        """Answer one question and return the evidence it produced."""
+        outcome = self.run(question, understanding=understanding, tables=tables)
+        provenance = Provenance(
+            tool=self.tool_name, trace_id=trace_id, query=question
+        )
+        return self.evidence(outcome, provenance)
+
+    def run(
+        self,
+        question: str,
+        *,
+        understanding: Mapping[str, Any] | None = None,
+        tables: Sequence[str] | None = None,
+    ) -> PipelineOutcome:
+        """Plan and run the question, raising rather than returning a partial answer."""
         selected = self._selected(tables)
         resolved = self._grounded(understanding)
 
@@ -130,8 +153,16 @@ class ClaimsQuerier:
         )
         if not outcome.ok:
             raise QueryFailedError(_failure_reason(outcome.steps))
+        return outcome
 
-        provenance = Provenance(tool=TOOL_NAME, trace_id=trace_id, query=question)
+    def evidence(
+        self, outcome: PipelineOutcome, provenance: Provenance
+    ) -> list[Evidence]:
+        """One piece of evidence per plan step, citing the query that produced it.
+
+        Overridden by the spreadsheet source, whose citation is a cell range rather than a
+        table, and which therefore emits one piece of evidence per row.
+        """
         return [_evidence(step, provenance) for step in outcome.steps]
 
     # -- setup -------------------------------------------------------------
