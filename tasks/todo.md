@@ -162,7 +162,7 @@ contains the value in the source `.xlsx`.
 
 ## Phase C-7 — Orchestrator
 
-- [ ] **C-7.1** `orchestrator/state.py` — validated typed state. — `A` unibot shape
+- [x] **C-7.1** `orchestrator/state.py` — validated typed state. — `A` unibot shape
 - [ ] **C-7.2** `nodes/understand.py`. — `V` unibot
 - [ ] **C-7.3** `nodes/route.py` — **source** router; no question-string matching. — `A` pattern
 - [ ] **C-7.4** `nodes/plan.py` — per-source sub-goals + answerability gate. — `A` unibot
