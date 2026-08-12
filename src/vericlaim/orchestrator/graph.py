@@ -41,6 +41,7 @@ from vericlaim.orchestrator.nodes.collect import collect as collect_node
 from vericlaim.orchestrator.nodes.plan import plan as plan_node
 from vericlaim.orchestrator.nodes.route import route as route_node
 from vericlaim.orchestrator.nodes.sufficiency import sufficiency as sufficiency_node
+from vericlaim.orchestrator.nodes.synthesize import synthesize as synthesize_node
 from vericlaim.orchestrator.nodes.understand import understand as understand_node
 from vericlaim.orchestrator.sources import SourceCapability, load_capabilities
 from vericlaim.orchestrator.state import GraphState, StageRecord
@@ -67,6 +68,7 @@ def build_graph(
     plan: Node | None = None,
     collect: Node | None = None,
     sufficiency: Node | None = None,
+    synthesize: Node | None = None,
     gateway: Any | None = None,
 ) -> Any:
     """Compile the graph for one question, over the given source tools.
@@ -84,6 +86,7 @@ def build_graph(
     plan = plan or functools.partial(plan_node, capabilities=capabilities, gateway=gateway)
     collect = collect or collect_node
     sufficiency = sufficiency or functools.partial(sufficiency_node, gateway=gateway)
+    synthesize = synthesize or functools.partial(synthesize_node, gateway=gateway)
 
     graph = StateGraph(GraphState)
     graph.add_node("understand", _as_graph_node(understand))
@@ -91,6 +94,7 @@ def build_graph(
     graph.add_node("plan", _plan_graph_node(plan))
     graph.add_node("collect", _as_graph_node(collect))
     graph.add_node("sufficiency", _as_graph_node(sufficiency))
+    graph.add_node("synthesize", _as_graph_node(synthesize))
     for source in capabilities:
         graph.add_node(_node_name(source), _source_node(source, tools))
 
@@ -100,7 +104,10 @@ def build_graph(
     graph.add_conditional_edges(
         "plan",
         functools.partial(_fan_out, capabilities=capabilities),
-        {**{source: _node_name(source) for source in capabilities}, END: END},
+        {
+            **{source: _node_name(source) for source in capabilities},
+            "synthesize": "synthesize",
+        },
     )
     # Every branch converges on collect, which is where the separate returns become one
     # ordered body of evidence and one account of what is missing from it.
@@ -110,8 +117,9 @@ def build_graph(
     # The loop-back edge, and the only cycle in the graph. Sufficiency has already
     # applied the bound, so this edge only asks what it decided.
     graph.add_conditional_edges(
-        "sufficiency", _replan, {"plan": "plan", END: END}
+        "sufficiency", _replan, {"plan": "plan", "synthesize": "synthesize"}
     )
+    graph.add_edge("synthesize", END)
 
     return graph.compile()
 
@@ -130,7 +138,7 @@ def _replan(state: GraphState) -> str:
     The bound lives with the verdict rather than here: this edge must not be able to
     disagree with what was recorded on the state and shown in the trace.
     """
-    return "plan" if state.sufficiency.get("replan") else END
+    return "plan" if state.sufficiency.get("replan") else "synthesize"
 
 
 def _plan_graph_node(plan: Node) -> Callable[[GraphState], dict[str, Any]]:
@@ -154,16 +162,20 @@ def _node_name(source: str) -> str:
 def _fan_out(
     state: GraphState, *, capabilities: Mapping[str, SourceCapability]
 ) -> list[str]:
-    """Return the sources to run, or END when the question stops here.
+    """Return the sources to run, or synthesis when the question stops here.
 
     Two conditions have to hold for a source to be reached: the router chose it, and the
     planner wrote it a sub-goal. Either one missing means the tool would be called with
     nothing decided about what to ask it.
+
+    A question that stops here still goes to synthesis, which writes the refusal from
+    what the deciding node recorded. Ending the run instead would leave the asker with
+    no answer at all where there is a perfectly good thing to tell them.
     """
     if state.routing is None or not state.routing.sources:
-        return [END]
+        return ["synthesize"]
     if not state.plans.get("answerable"):
-        return [END]
+        return ["synthesize"]
 
     sub_goals = state.plans.get("sub_goals") or {}
     routed = [
@@ -171,7 +183,7 @@ def _fan_out(
         for source in state.routing.sources
         if source in capabilities and sub_goals.get(source, {}).get("goal")
     ]
-    return routed or [END]
+    return routed or ["synthesize"]
 
 
 def _as_graph_node(node: Node) -> Callable[[GraphState], dict[str, Any]]:

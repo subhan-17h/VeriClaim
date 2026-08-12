@@ -169,7 +169,7 @@ contains the value in the source `.xlsx`.
 - [x] **C-7.5** `graph.py` — LangGraph conditional fan-out, concurrent independent sources. — `N`
 - [x] **C-7.6** `nodes/collect.py` — normalize into one `EvidenceSet`. — `N`
 - [x] **C-7.7** `nodes/sufficiency.py` — deterministic first, then LLM gap check; `MAX_REPLANS=2`. — `A`
-- [ ] **C-7.8** `nodes/synthesize.py` — evidence-only input, `[En]` markers, no overclaiming. — `N`
+- [x] **C-7.8** `nodes/synthesize.py` — evidence-only input, `[En]` markers, no overclaiming. — `N`
 - [ ] **C-7.9** `nodes/verify.py` — deterministic citation resolution + faithfulness guard. — `N`
 - [ ] **C-7.10** LangSmith instrumentation; guard against duplicated run trees. — `N`
 

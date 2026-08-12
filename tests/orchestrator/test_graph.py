@@ -137,6 +137,7 @@ class ScriptedNodes:
         self.planned = 0
         self.insufficient_passes = insufficient_passes
         self.assessed = 0
+        self.synthesized = 0
         self.hints: list[str] = []
 
     def understand(self, state: GraphState, **_: Any) -> GraphState:
@@ -176,6 +177,12 @@ class ScriptedNodes:
         )
 
 
+    def synthesize(self, state: GraphState, **_: Any) -> GraphState:
+        self.synthesized += 1
+        return state.with_(answer="Scripted answer [E1].").with_stage(
+            StageRecord(name="synthesize")
+        )
+
     def sufficiency(self, state: GraphState, **_: Any) -> GraphState:
         """Stand in for the real verdict, applying the same bound it does."""
         self.assessed += 1
@@ -206,6 +213,7 @@ def run(
         route=nodes.route,
         plan=nodes.plan,
         sufficiency=nodes.sufficiency,
+        synthesize=nodes.synthesize,
     )
     return run_question(graph, question)
 
@@ -298,7 +306,7 @@ def test_every_source_that_ran_is_recorded_as_its_own_stage() -> None:
         f"{SOURCE_STAGE_PREFIX}policy",
         f"{SOURCE_STAGE_PREFIX}sql",
     }
-    assert names[5:] == ["collect", "sufficiency"]
+    assert names[5:] == ["collect", "sufficiency", "synthesize"]
 
 
 # ------------------------------------------------------------------ a source that fails
@@ -448,7 +456,11 @@ def test_what_the_sources_returned_is_collected_into_one_account() -> None:
 
     assert state.collection["by_source"] == {"policy": 1}
     assert state.collection["silent_sources"] == ["sql"]
-    assert [record.name for record in state.stages[-2:]] == ["collect", "sufficiency"]
+    assert [record.name for record in state.stages[-3:]] == [
+        "collect",
+        "sufficiency",
+        "synthesize",
+    ]
 
 
 def test_a_question_that_never_fanned_out_is_never_collected() -> None:
@@ -458,7 +470,12 @@ def test_a_question_that_never_fanned_out_is_never_collected() -> None:
 
     state = run(tools, ScriptedNodes(out_of_scope=True))
 
-    assert [record.name for record in state.stages] == ["understand", "route", "plan"]
+    assert [record.name for record in state.stages] == [
+        "understand",
+        "route",
+        "plan",
+        "synthesize",
+    ]
     assert state.collection == {}
 
 
@@ -500,3 +517,16 @@ def test_enough_evidence_the_first_time_never_replans() -> None:
 
     assert nodes.planned == 1
     assert state.replans == 0
+
+
+def test_a_question_that_stops_early_still_gets_an_answer() -> None:
+    """The refusal is the answer. Ending the run instead would leave the asker with
+    nothing where there is a perfectly good thing to tell them."""
+    tools = {name: RecordingTool([policy_evidence()]) for name in CAPABILITIES}
+    nodes = ScriptedNodes(out_of_scope=True)
+
+    state = run(tools, nodes)
+
+    assert nodes.synthesized == 1
+    assert state.answer
+    assert not any(tool.called for tool in tools.values())
