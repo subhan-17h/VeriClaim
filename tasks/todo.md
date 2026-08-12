@@ -126,8 +126,12 @@ confidence and cites by page; CSRS's silent zero-chunk path proven closed by tes
       and a repair that returns what it was asked to fix. The inherited empty-result backstop
       could never fire — it re-ran the grounding rewrite over already-rewritten SQL — so it is
       replaced by naming the filter value the database does not hold.)
-- [ ] **C-5.9** Candidate clustering + unit-test arbitration; `DOMAIN_CONVENTIONS` rewritten; the
+- [x] **C-5.9** Candidate clustering + unit-test arbitration; `DOMAIN_CONVENTIONS` rewritten; the
       silent bare `except` removed. — `A` unibot
+      (`DOMAIN_CONVENTIONS` is not rewritten but **replaced by the contexts' `cautions`**, so the
+      arbiter enforces what a reviewer wrote. A candidate the observer already rejected never
+      gets a vote. Arbitration failure degrades to the deterministic pick, logged and named in
+      the selection — the reference swallowed it without a word.)
 - [ ] **C-5.10** `sql/tool.py` — `query_claims_db() -> list[Evidence]` carrying the executed SQL. — `N`
 
 **Acceptance:** `tests/sql` green; `smoke.py` proves DDL rejected at the DB level; every unsafe-SQL

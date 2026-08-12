@@ -169,6 +169,12 @@ class Settings(BaseSettings):
     sql_step_budget_s: float = 60.0
     sql_candidate_count: int = 4
     sql_multi_candidate_enabled: bool = True
+    # Candidates are only worth writing if they differ; at zero temperature the diverse
+    # prompts would still converge on one query and the comparison would prove nothing.
+    sql_candidate_temperature: float = 0.6
+    # Assertions written to arbitrate between candidate groups that disagree. Zero turns
+    # arbitration off and leaves the deterministic choice standing.
+    sql_unit_test_count: int = 2
 
     # --- Cost control -----------------------------------------------------
     # Gemini's free tier serves every tier; OpenAI rungs are marked paid in

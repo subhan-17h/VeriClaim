@@ -14,6 +14,7 @@ manufactures a confident answer to a question nobody asked.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -51,11 +52,15 @@ def step(calculations: str = "COUNT(*) over all rows.") -> PlanStep:
 
 
 def settings(**overrides: Any) -> Settings:
+    """One generated query by default, so the repair loop is what is under test."""
     return Settings(
-        sql_max_refine_attempts=2,
-        sql_step_budget_s=60.0,
-        sql_row_limit=500,
-        **overrides,
+        **{
+            "sql_max_refine_attempts": 2,
+            "sql_step_budget_s": 60.0,
+            "sql_row_limit": 500,
+            "sql_multi_candidate_enabled": False,
+            **overrides,
+        }
     )
 
 
@@ -65,12 +70,15 @@ class FakeGateway:
 
     sql: list[str]
     tasks: list[str] = field(default_factory=list)
+    # Candidates are generated concurrently, so the queue has to be handed out safely.
+    lock: threading.Lock = field(default_factory=threading.Lock)
 
     def complete_json(
         self, task: str, messages: Any, schema: dict[str, Any], **kwargs: Any
     ) -> Any:
-        index = min(len(self.tasks), len(self.sql) - 1)
-        self.tasks.append(task)
+        with self.lock:
+            index = min(len(self.tasks), len(self.sql) - 1)
+            self.tasks.append(task)
         return _Completion({"sql": self.sql[index]})
 
     @property
@@ -337,3 +345,57 @@ def test_a_completed_step_is_offered_to_the_next_one() -> None:
     )
 
     assert gateway.tasks == ["sql_generator", "sql_generator"]
+
+
+# ------------------------------------------------------------------ candidates
+
+
+def multi(**overrides: Any) -> Settings:
+    return settings(
+        sql_multi_candidate_enabled=True,
+        sql_candidate_count=3,
+        sql_unit_test_count=0,
+        **overrides,
+    )
+
+
+def test_several_candidates_are_written_and_the_agreed_one_is_kept() -> None:
+    """Three tries at the step, all agreeing, is one answer with corroboration -- and no
+    arbitration call, because there is nothing to arbitrate."""
+    gateway = FakeGateway([COUNT_SQL])
+    database = FakeDatabase([rows((42,))])
+
+    outcome = run(gateway, database, config=multi())
+
+    assert outcome.status == "completed"
+    assert gateway.tasks == ["sql_generator"] * 3
+    assert outcome.selection.reason == "single_cluster"
+
+
+def test_the_winning_candidate_is_not_executed_a_second_time() -> None:
+    """It already ran. Running it again spends a query to learn what is in hand."""
+    gateway = FakeGateway([COUNT_SQL])
+    database = FakeDatabase([rows((42,))])
+
+    run(gateway, database, config=multi())
+
+    assert len(database.executed) == 3
+
+
+def test_candidates_that_all_fail_fall_back_to_writing_one_query() -> None:
+    gateway = FakeGateway(["DROP TABLE ops.claims"] * 3 + [COUNT_SQL])
+    database = FakeDatabase([rows((42,))])
+
+    outcome = run(gateway, database, config=multi())
+
+    assert outcome.status == "completed"
+    assert gateway.tasks.count("sql_generator") == 4
+
+
+def test_one_query_is_written_when_candidates_are_switched_off() -> None:
+    gateway = FakeGateway([COUNT_SQL])
+    database = FakeDatabase([rows((42,))])
+
+    run(gateway, database, config=settings())
+
+    assert gateway.tasks == ["sql_generator"]

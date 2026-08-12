@@ -39,8 +39,9 @@ import sqlglot
 from sqlglot.errors import ParseError
 
 from vericlaim.config import Settings, get_settings
+from vericlaim.sql.candidates import Candidate, Selection, select
 from vericlaim.sql.contexts import SchemaContext, allow_list
-from vericlaim.sql.generator import generate_sql
+from vericlaim.sql.generator import generate_sql, generate_sql_candidates
 from vericlaim.sql.observer import ExecutionResult, Observation, observe
 from vericlaim.sql.planner import PlanStep, QueryPlan
 from vericlaim.sql.refiner import execution_feedback, refine_sql
@@ -78,6 +79,9 @@ class StepOutcome:
     observation: Observation | None = None
     attempts: int = 0
     failure: str = ""
+    # Present only when several candidates were written. Carries how the choice between
+    # them was made, including a note when arbitration could not be reached.
+    selection: Selection | None = None
 
     @property
     def answered(self) -> bool:
@@ -164,7 +168,36 @@ def run_step(
     deadline = clock() + resolved_settings.sql_step_budget_s
     allowed = allow_list(contexts, step.tables)
 
-    sql = generate_sql(
+    selection: Selection | None = None
+    if (
+        resolved_settings.sql_multi_candidate_enabled
+        and resolved_settings.sql_candidate_count > 1
+    ):
+        selection, winner = _from_candidates(
+            question,
+            step,
+            contexts,
+            catalog=catalog,
+            execute=execute,
+            settings=resolved_settings,
+            allowed=allowed,
+            completed=completed,
+            resolved=resolved,
+            gateway=gateway,
+        )
+        if winner is not None and winner.observation.verdict == "ok":
+            # It already ran and the observer was satisfied. Executing it again would
+            # spend a query to learn what is already in hand.
+            return StepOutcome(
+                step,
+                "completed",
+                winner.sql,
+                winner.result,
+                winner.observation,
+                selection=selection,
+            )
+
+    sql = (selection.sql if selection and selection.sql else None) or generate_sql(
         question,
         step,
         contexts,
@@ -188,7 +221,13 @@ def run_step(
 
             if observation.verdict == "ok":
                 return StepOutcome(
-                    step, "completed", executable, result, observation, attempts
+                    step,
+                    "completed",
+                    executable,
+                    result,
+                    observation,
+                    attempts,
+                    selection=selection,
                 )
 
             if observation.verdict == "empty_result":
@@ -203,10 +242,17 @@ def run_step(
                         attempts,
                         "No rows: the database holds no such value for "
                         f"{', '.join(repr(value) for value in unknown)}.",
+                        selection=selection,
                     )
                 if empty_refines >= MAX_EMPTY_REFINES:
                     return StepOutcome(
-                        step, "ok_empty", executable, result, observation, attempts
+                        step,
+                        "ok_empty",
+                        executable,
+                        result,
+                        observation,
+                        attempts,
+                        selection=selection,
                     )
                 empty_refines += 1
 
@@ -223,6 +269,7 @@ def run_step(
                 observation,
                 attempts,
                 failure,
+                selection=selection,
             )
         if clock() >= deadline:
             return StepOutcome(
@@ -235,6 +282,7 @@ def run_step(
                 f"budget_exhausted: the step exceeded its "
                 f"{resolved_settings.sql_step_budget_s:g}s wall-clock budget after "
                 f"{attempts} repair(s). Last problem: {failure}",
+                selection=selection,
             )
 
         repaired = refine_sql(
@@ -262,8 +310,71 @@ def run_step(
                 observation,
                 attempts,
                 "" if status == "ok_empty" else f"no_progress: {failure}",
+                selection=selection,
             )
         sql = repaired
+
+
+def _from_candidates(
+    question: str,
+    step: PlanStep,
+    contexts: Mapping[str, SchemaContext],
+    *,
+    catalog: Catalog,
+    execute: Executor,
+    settings: Settings,
+    allowed: Any,
+    completed: Sequence[Mapping[str, Any]],
+    resolved: EntityResolution | None,
+    gateway: Any | None,
+) -> tuple[Selection, Candidate | None]:
+    """Write the step several ways, run each, and choose between what came back.
+
+    Every candidate goes through the same validation and grounding as a single generated
+    query would: a candidate is not trusted more for having company. One that fails to
+    validate is dropped here rather than repaired, because there are others to try and the
+    repair loop is still waiting behind this.
+    """
+    written = generate_sql_candidates(
+        question,
+        step,
+        contexts,
+        candidate_count=settings.sql_candidate_count,
+        temperature=settings.sql_candidate_temperature,
+        completed=completed,
+        resolved=resolved,
+        gateway=gateway,
+    )
+
+    candidates: list[Candidate] = []
+    for written_candidate in written:
+        verdict = validate_sql(written_candidate.sql, allowed, settings.sql_row_limit)
+        if not verdict.ok:
+            continue
+        executable = _grounded(verdict.sql, catalog, allowed, settings)
+        result = execute(executable)
+        candidates.append(
+            Candidate(
+                sql=executable,
+                style=written_candidate.style,
+                result=result,
+                observation=observe(result, step, contexts),
+            )
+        )
+
+    selection = select(
+        question,
+        step,
+        candidates,
+        contexts,
+        unit_test_count=settings.sql_unit_test_count,
+        resolved=resolved,
+        gateway=gateway,
+    )
+    winner = next(
+        (candidate for candidate in candidates if candidate.sql == selection.sql), None
+    )
+    return selection, winner
 
 
 def _grounded(
