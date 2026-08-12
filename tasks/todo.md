@@ -105,8 +105,10 @@ confidence and cites by page; CSRS's silent zero-chunk path proven closed by tes
       `exp.Select` gate to admit `UNION`/`INTERSECT`/`EXCEPT`. — `V` unibot
 - [x] **C-5.4** `sql/contexts/*.yaml` + loader + profiler, authored for insurance. — `V` pattern
       (YAML lives at `contexts/sql/`; a module and a package cannot share `sql/contexts`.)
-- [ ] **C-5.5** `sql/resolver.py` + `values_catalog.py` — insurer noise tokens, claim-number fast
+- [x] **C-5.5** `sql/resolver.py` + `values_catalog.py` — insurer noise tokens, claim-number fast
       path, **generation-keyed cache** replacing the un-invalidated global. — `A` unibot
+      (References are looked up **exactly, in the database**, and never fall through to fuzzy
+      matching; the embedding fallback is dropped — grounding here is deterministic.)
 - [ ] **C-5.6** `sql/planner.py` + `generator.py` — structure kept, **all academic prompts
       rewritten**. — `A` structure, `N` prompts
 - [ ] **C-5.7** `sql/observer.py` — deterministic verdicts + insurance shape checks. — `A` unibot
