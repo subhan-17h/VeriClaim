@@ -1,0 +1,94 @@
+# What each source can answer, and what it cannot.
+#
+# Reviewed content, not generated. The router makes its decision from these descriptions
+# and nothing else -- its prompt names no source -- so this file is where "what the system
+# believes each source covers" is written down in a form a person can check.
+#
+# `cannot_answer` is as load-bearing as `answers`. A router shown only what each source
+# covers routes every question to whichever description sounds nearest, which is how a
+# question about a written rule ends up answered with a number.
+#
+# `name` must be one of the evidence source types. Routing to a name outside that
+# vocabulary would produce evidence the citation layer cannot place.
+
+- name: policy
+  tool: search_policy
+  title: Policy wordings
+  holds: >
+    The insurer's own issued documents: the wordings for each product, their schedules of
+    exclusions, and the endorsements that amend them. Text as published, not as applied to
+    any particular case.
+  answers:
+    - what a wording states about a peril, a condition, an exclusion or an endorsement
+    - the deductible, limit or waiting period a product declares, as written
+    - which document and clause governs a stated situation
+    - whether the written terms distinguish two circumstances that sound alike
+  cannot_answer:
+    - how many times something has happened, or any total, rate or trend
+    - what was recorded, paid or reserved on a particular case
+    - what an inspector, contractor or assessor observed
+    - anything an analyst compiled for periodic review
+  citation: The document, the page within it, and the clause on that page.
+
+- name: sql
+  tool: query_claims_db
+  title: Operational transaction database
+  holds: >
+    The system of record for the insurer's day-to-day operations: the parties, the cover
+    issued to them, the incidents reported against that cover, the money moved on each,
+    and the staff and places they are attributed to. One row per real event, with the
+    dates each event carries.
+  answers:
+    - counts, totals, averages, rates and distributions over recorded events
+    - how a figure moves over time, or differs between groups
+    - the recorded facts of a particular case, including its dates, amounts and status
+    - which entities sit at the extreme of a computed measure
+  cannot_answer:
+    - what any written rule or document states
+    - what appears in paperwork received as an image
+    - a target, ratio or summary an analyst prepared rather than the system recorded
+    - why something happened, beyond what the recorded fields state
+  citation: >
+    The tables read, the exact query that was executed, and the number of rows it
+    returned.
+
+- name: spreadsheet
+  tool: query_spreadsheets
+  title: Analyst workbooks
+  holds: >
+    Periodic reports maintained by hand in workbooks: the targets set for a period, the
+    compliance and performance summaries prepared against them, and the ratios and
+    categorisations compiled for review. Prepared figures, arrived at outside the
+    transaction system.
+  answers:
+    - what target, threshold or expectation was set for a period
+    - a compliance, performance or ratio figure as an analyst reported it
+    - how a reported figure compares with the target beside it
+    - a categorisation or banding maintained by hand rather than derived
+  cannot_answer:
+    - the underlying events themselves, one row per occurrence
+    - what any written rule or document states
+    - what appears in paperwork received as an image
+    - any period or breakdown the workbooks do not already contain
+  citation: The workbook, the sheet within it, the row, and the A1 range of the cells.
+
+- name: scanned_pdf
+  tool: search_scanned
+  title: Received paperwork, as images
+  holds: >
+    Documents that arrived as pictures of pages rather than text: reports written by field
+    inspectors, contractor and supplier invoices, and completed forms. Each is attached to
+    the case it belongs to, and each was read by character recognition, so what it yields
+    carries a confidence and can be partly illegible.
+  answers:
+    - what an inspector, contractor or assessor wrote about a particular case
+    - the cause, circumstances or observations described on received paperwork
+    - a figure, date or reference written on a received document
+    - whether the paperwork on a case says what other sources imply it should
+  cannot_answer:
+    - totals, counts or trends across many cases
+    - what the insurer's own issued documents state
+    - anything an analyst compiled for periodic review
+    - anything on a page too degraded to be read, which is reported rather than guessed
+  citation: >
+    The document, the page within it, and the confidence with which that page was read.
