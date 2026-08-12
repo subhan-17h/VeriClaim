@@ -145,7 +145,9 @@ test rejects **before** execution.
       sheets, sentinels, currency/percent formats. — `N`
 - [ ] **C-6.2** `sheets/ingest.py` — `sheets.*` schema with `_workbook`/`_sheet`/`_row`/`_a1_range`
       lineage; non-destructive generation-tagged ingest. — `A` unibot header detection, rest `N`
-- [ ] **C-6.3** Type coercion — currency, percent, separators, NULL sentinels, mixed columns. — `N`
+- [x] **C-6.3** Type coercion — currency, percent, separators, NULL sentinels, mixed columns. — `N`
+      (Built before C-6.2, which uses it: a commit that does not work on its own is not a
+      reviewable increment.)
 - [ ] **C-6.4** `sheets/contexts/*.yaml`. — `V` pattern
 - [ ] **C-6.5** `sheets/tool.py` — shared validator/executor, `SpreadsheetLocator` from lineage. — `N`
 
