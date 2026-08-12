@@ -40,6 +40,7 @@ from vericlaim.evidence import Evidence
 from vericlaim.orchestrator.nodes.collect import collect as collect_node
 from vericlaim.orchestrator.nodes.plan import plan as plan_node
 from vericlaim.orchestrator.nodes.route import route as route_node
+from vericlaim.orchestrator.nodes.sufficiency import sufficiency as sufficiency_node
 from vericlaim.orchestrator.nodes.understand import understand as understand_node
 from vericlaim.orchestrator.sources import SourceCapability, load_capabilities
 from vericlaim.orchestrator.state import GraphState, StageRecord
@@ -65,6 +66,7 @@ def build_graph(
     route: Node | None = None,
     plan: Node | None = None,
     collect: Node | None = None,
+    sufficiency: Node | None = None,
     gateway: Any | None = None,
 ) -> Any:
     """Compile the graph for one question, over the given source tools.
@@ -81,12 +83,14 @@ def build_graph(
     )
     plan = plan or functools.partial(plan_node, capabilities=capabilities, gateway=gateway)
     collect = collect or collect_node
+    sufficiency = sufficiency or functools.partial(sufficiency_node, gateway=gateway)
 
     graph = StateGraph(GraphState)
     graph.add_node("understand", _as_graph_node(understand))
     graph.add_node("route", _as_graph_node(route))
-    graph.add_node("plan", _as_graph_node(plan))
+    graph.add_node("plan", _plan_graph_node(plan))
     graph.add_node("collect", _as_graph_node(collect))
+    graph.add_node("sufficiency", _as_graph_node(sufficiency))
     for source in capabilities:
         graph.add_node(_node_name(source), _source_node(source, tools))
 
@@ -102,7 +106,12 @@ def build_graph(
     # ordered body of evidence and one account of what is missing from it.
     for source in capabilities:
         graph.add_edge(_node_name(source), "collect")
-    graph.add_edge("collect", END)
+    graph.add_edge("collect", "sufficiency")
+    # The loop-back edge, and the only cycle in the graph. Sufficiency has already
+    # applied the bound, so this edge only asks what it decided.
+    graph.add_conditional_edges(
+        "sufficiency", _replan, {"plan": "plan", END: END}
+    )
 
     return graph.compile()
 
@@ -113,6 +122,29 @@ def run_question(graph: Any, question: str, **config: Any) -> GraphState:
     # model is called, with the same error every other entry point gives.
     start = GraphState(question=question)
     return GraphState(**graph.invoke(start, **config))
+
+
+def _replan(state: GraphState) -> str:
+    """Go round again only if the sufficiency node said so.
+
+    The bound lives with the verdict rather than here: this edge must not be able to
+    disagree with what was recorded on the state and shown in the trace.
+    """
+    return "plan" if state.sufficiency.get("replan") else END
+
+
+def _plan_graph_node(plan: Node) -> Callable[[GraphState], dict[str, Any]]:
+    """Adapt the plan node, carrying in what an earlier pass failed to find.
+
+    The hint is read off the state rather than bound at build time, because on the
+    second pass it is a thing the first pass discovered.
+    """
+
+    def run(state: GraphState) -> dict[str, Any]:
+        hint = str(state.sufficiency.get("retry_hint", ""))
+        return _update(state, plan(state, retry_hint=hint))
+
+    return run
 
 
 def _node_name(source: str) -> str:

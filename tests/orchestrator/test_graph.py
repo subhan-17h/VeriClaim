@@ -26,7 +26,12 @@ from vericlaim.evidence import (
 )
 from vericlaim.orchestrator.graph import SOURCE_STAGE_PREFIX, build_graph, run_question
 from vericlaim.orchestrator.sources import SourceCapability
-from vericlaim.orchestrator.state import GraphState, RoutingDecision, StageRecord
+from vericlaim.orchestrator.state import (
+    MAX_REPLANS,
+    GraphState,
+    RoutingDecision,
+    StageRecord,
+)
 
 QUESTION = "What does the wording say about escape of water, and how often did it happen?"
 
@@ -117,6 +122,7 @@ class ScriptedNodes:
         needs_clarification: bool = False,
         answerable: bool = True,
         goals: dict[str, str] | None = None,
+        insufficient_passes: int = 0,
     ) -> None:
         self.decision = RoutingDecision(
             sources=() if (out_of_scope or needs_clarification) else sources,
@@ -129,6 +135,9 @@ class ScriptedNodes:
         self.answerable = answerable
         self.goals = goals or {}
         self.planned = 0
+        self.insufficient_passes = insufficient_passes
+        self.assessed = 0
+        self.hints: list[str] = []
 
     def understand(self, state: GraphState, **_: Any) -> GraphState:
         return state.with_(understanding={"query_type": "lookup"}).with_stage(
@@ -138,8 +147,9 @@ class ScriptedNodes:
     def route(self, state: GraphState, **_: Any) -> GraphState:
         return state.with_(routing=self.decision).with_stage(StageRecord(name="route"))
 
-    def plan(self, state: GraphState, **_: Any) -> GraphState:
+    def plan(self, state: GraphState, *, retry_hint: str = "", **_: Any) -> GraphState:
         self.planned += 1
+        self.hints.append(retry_hint)
         state = state.with_stage(StageRecord(name="plan"))
         if not self.decision.sources:
             return state
@@ -166,6 +176,24 @@ class ScriptedNodes:
         )
 
 
+    def sufficiency(self, state: GraphState, **_: Any) -> GraphState:
+        """Stand in for the real verdict, applying the same bound it does."""
+        self.assessed += 1
+        enough = self.assessed > self.insufficient_passes
+        replan = not enough and state.can_replan
+        state = state.with_(
+            sufficiency={
+                "sufficient": enough,
+                "gaps": [] if enough else ["Nothing on the deductible."],
+                "reason": "Scripted.",
+                "assessed_by": "model",
+                "replan": replan,
+                "retry_hint": "Nothing on the deductible." if replan else "",
+            }
+        ).with_stage(StageRecord(name="sufficiency"))
+        return state.replanned() if replan else state
+
+
 def run(
     tools: dict[str, Any],
     nodes: ScriptedNodes,
@@ -177,8 +205,13 @@ def run(
         understand=nodes.understand,
         route=nodes.route,
         plan=nodes.plan,
+        sufficiency=nodes.sufficiency,
     )
     return run_question(graph, question)
+
+
+def stage(state: GraphState, name: str) -> StageRecord:
+    return next(record for record in state.stages if record.name == name)
 
 
 # ------------------------------------------------------------------ fan-out
@@ -259,13 +292,13 @@ def test_every_source_that_ran_is_recorded_as_its_own_stage() -> None:
 
     state = run(tools, ScriptedNodes(sources=("policy", "sql")))
 
-    names = [stage.name for stage in state.stages]
+    names = [record.name for record in state.stages]
     assert names[:3] == ["understand", "route", "plan"]
-    assert set(names[3:-1]) == {
+    assert set(names[3:5]) == {
         f"{SOURCE_STAGE_PREFIX}policy",
         f"{SOURCE_STAGE_PREFIX}sql",
     }
-    assert names[-1] == "collect"
+    assert names[5:] == ["collect", "sufficiency"]
 
 
 # ------------------------------------------------------------------ a source that fails
@@ -305,7 +338,7 @@ def test_a_source_that_returns_nothing_is_not_a_failure() -> None:
 
     assert state.evidence.items == ()
     assert state.failures == ()
-    assert state.stages[-1].detail["evidence"] == 0
+    assert stage(state, f"{SOURCE_STAGE_PREFIX}policy").detail["evidence"] == 0
 
 
 # ------------------------------------------------------------------ not fanning out
@@ -374,7 +407,7 @@ def test_the_stages_are_recorded_once_each() -> None:
 
     state = run(tools, ScriptedNodes(sources=("policy", "sql")))
 
-    names = [stage.name for stage in state.stages]
+    names = [record.name for record in state.stages]
     assert len(names) == len(set(names))
 
 
@@ -415,7 +448,7 @@ def test_what_the_sources_returned_is_collected_into_one_account() -> None:
 
     assert state.collection["by_source"] == {"policy": 1}
     assert state.collection["silent_sources"] == ["sql"]
-    assert state.stages[-1].name == "collect"
+    assert [record.name for record in state.stages[-2:]] == ["collect", "sufficiency"]
 
 
 def test_a_question_that_never_fanned_out_is_never_collected() -> None:
@@ -425,5 +458,45 @@ def test_a_question_that_never_fanned_out_is_never_collected() -> None:
 
     state = run(tools, ScriptedNodes(out_of_scope=True))
 
-    assert [stage.name for stage in state.stages] == ["understand", "route", "plan"]
+    assert [record.name for record in state.stages] == ["understand", "route", "plan"]
     assert state.collection == {}
+
+
+# ------------------------------------------------------------------ going round again
+
+
+def test_a_gap_sends_the_question_back_to_the_planner() -> None:
+    """The one cycle in the graph. The second pass plans again against what the first
+    one failed to find, and its evidence joins the set rather than replacing it."""
+    tools = {name: RecordingTool([policy_evidence()]) for name in CAPABILITIES}
+    nodes = ScriptedNodes(sources=("policy",), insufficient_passes=1)
+
+    state = run(tools, nodes)
+
+    assert nodes.planned == 2
+    assert nodes.hints == ["", "Nothing on the deductible."]
+    assert state.replans == 1
+    assert state.sufficiency["sufficient"] is True
+
+
+def test_the_loop_stops_at_the_bound() -> None:
+    """Each pass is a full fan-out. Without the bound a source that can never satisfy
+    the check would spend the whole budget rediscovering that."""
+    tools = {name: RecordingTool([policy_evidence()]) for name in CAPABILITIES}
+    nodes = ScriptedNodes(sources=("policy",), insufficient_passes=99)
+
+    state = run(tools, nodes)
+
+    assert nodes.planned == 1 + MAX_REPLANS
+    assert state.replans == MAX_REPLANS
+    assert state.sufficiency["sufficient"] is False
+
+
+def test_enough_evidence_the_first_time_never_replans() -> None:
+    tools = {name: RecordingTool([policy_evidence()]) for name in CAPABILITIES}
+    nodes = ScriptedNodes(sources=("policy",))
+
+    state = run(tools, nodes)
+
+    assert nodes.planned == 1
+    assert state.replans == 0
