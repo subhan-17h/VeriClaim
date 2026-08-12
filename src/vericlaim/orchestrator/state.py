@@ -26,7 +26,7 @@ convenience would break that quietly.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -73,6 +73,30 @@ class RoutingDecision(BaseModel):
     clarification_question: str = ""
 
 
+def merge_evidence(left: EvidenceSet, right: Sequence[Evidence]) -> EvidenceSet:
+    """Combine evidence from a concurrent branch into a set, preserving ids.
+
+    LangGraph merges the states its parallel branches return; this is the reducer that
+    does it for evidence, so two branches finishing together produce one set with stable
+    ids rather than two lists whose ``[E1]`` mean different things.
+    """
+    merged = EvidenceSet(list(left.items))
+    merged.extend(list(right))
+    return merged
+
+
+def merge_stages(
+    left: Sequence[StageRecord], right: Sequence[StageRecord]
+) -> tuple[StageRecord, ...]:
+    """Append one branch's stages to the run's, keeping every one of them.
+
+    Assignment would be wrong here in a way that only shows up under concurrency: two
+    sources finishing together would each overwrite the other's record, and the trace
+    would report fewer stages than actually ran.
+    """
+    return (*left, *right)
+
+
 class GraphState(BaseModel):
     """Everything one question accumulates on its way to an answer."""
 
@@ -84,11 +108,17 @@ class GraphState(BaseModel):
     understanding: dict[str, Any] = Field(default_factory=dict)
     routing: RoutingDecision | None = None
     plans: dict[str, Any] = Field(default_factory=dict)
-    evidence: EvidenceSet = Field(default_factory=EvidenceSet)
+    # The two accumulating fields carry reducers, because these are the two the graph's
+    # parallel branches write at the same moment. Without them the framework treats two
+    # branches updating one field as a conflict; with them, four sources finishing
+    # together produce one set of evidence and one ordered run of stages.
+    evidence: Annotated[EvidenceSet, merge_evidence] = Field(
+        default_factory=EvidenceSet
+    )
     sufficiency: dict[str, Any] = Field(default_factory=dict)
     answer: str = ""
     citations: dict[str, Any] = Field(default_factory=dict)
-    stages: tuple[StageRecord, ...] = ()
+    stages: Annotated[tuple[StageRecord, ...], merge_stages] = ()
     replans: int = 0
     trace_id: str = ""
 
@@ -173,17 +203,3 @@ class GraphState(BaseModel):
             "latency_ms": self.total_latency_ms,
             "trace_id": self.trace_id,
         }
-
-
-def merge_evidence(
-    left: EvidenceSet, right: Sequence[Evidence]
-) -> EvidenceSet:
-    """Combine evidence from a concurrent branch into a set, preserving ids.
-
-    LangGraph merges the states its parallel branches return; this is the reducer that
-    does it for evidence, so two branches finishing together produce one set with stable
-    ids rather than two lists whose ``[E1]`` mean different things.
-    """
-    merged = EvidenceSet(list(left.items))
-    merged.extend(list(right))
-    return merged

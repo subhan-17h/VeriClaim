@@ -166,7 +166,7 @@ contains the value in the source `.xlsx`.
 - [x] **C-7.2** `nodes/understand.py`. — `V` unibot
 - [x] **C-7.3** `nodes/route.py` — **source** router; no question-string matching. — `A` pattern
 - [x] **C-7.4** `nodes/plan.py` — per-source sub-goals + answerability gate. — `A` unibot
-- [ ] **C-7.5** `graph.py` — LangGraph conditional fan-out, concurrent independent sources. — `N`
+- [x] **C-7.5** `graph.py` — LangGraph conditional fan-out, concurrent independent sources. — `N`
 - [ ] **C-7.6** `nodes/collect.py` — normalize into one `EvidenceSet`. — `N`
 - [ ] **C-7.7** `nodes/sufficiency.py` — deterministic first, then LLM gap check; `MAX_REPLANS=2`. — `A`
 - [ ] **C-7.8** `nodes/synthesize.py` — evidence-only input, `[En]` markers, no overclaiming. — `N`
