@@ -18,12 +18,14 @@ from pathlib import Path
 import pytest
 
 from vericlaim.sql.contexts import (
+    LINEAGE_COLUMN_NAMES,
     ContextError,
     allow_list,
     context_detail,
     context_summary,
     load_contexts,
 )
+from vericlaim.sql.profiler import dump_context
 
 CLAIMS_YAML = """
 schema: ops
@@ -441,3 +443,68 @@ def test_invariants_stay_out_of_the_prompt_views(tmp_path: Path) -> None:
 
     assert "invariants" not in context_summary(context)
     assert "invariants" not in context_detail(context)
+
+
+# ------------------------------------------------------------------ spreadsheets
+
+
+SHEET_YAML = """
+schema: sheets
+table: ric_q1__northern
+workbook: RIC_Q1.xlsx
+sheet: Northern
+purpose: Inspection compliance by region for Q1.
+columns:
+  - name: region
+    type: text
+    meaning: The region inspected.
+  - name: compliance
+    type: numeric
+    meaning: Proportion of scheduled inspections completed.
+"""
+
+
+def test_a_spreadsheet_backed_table_knows_which_file_it_came_from(tmp_path: Path) -> None:
+    write(tmp_path, "sheets.ric.yaml", SHEET_YAML)
+
+    context = load_contexts(tmp_path)["sheets.ric_q1__northern"]
+
+    assert context.workbook == "RIC_Q1.xlsx"
+    assert context.sheet == "Northern"
+    assert context.is_spreadsheet is True
+
+
+def test_an_ops_table_is_not_a_spreadsheet(context_dir) -> None:
+    assert load_contexts(context_dir)["ops.claims"].is_spreadsheet is False
+
+
+def test_the_lineage_columns_are_added_to_every_spreadsheet_context(tmp_path: Path) -> None:
+    """They have to be in the allow-list or the tool cannot select the very columns the
+    citation is built from -- and they are identical everywhere, so declaring them in each
+    file by hand is six chances to get one wrong."""
+    write(tmp_path, "sheets.ric.yaml", SHEET_YAML)
+
+    names = load_contexts(tmp_path)["sheets.ric_q1__northern"].column_names
+
+    assert names[:2] == ("region", "compliance")
+    assert set(LINEAGE_COLUMN_NAMES) <= set(names)
+
+
+def test_the_lineage_columns_explain_themselves_to_the_planner(tmp_path: Path) -> None:
+    write(tmp_path, "sheets.ric.yaml", SHEET_YAML)
+    context = load_contexts(tmp_path)["sheets.ric_q1__northern"]
+
+    lineage = next(column for column in context.columns if column.name == "_a1_range")
+
+    assert lineage.meaning
+
+
+def test_a_refresh_does_not_write_the_lineage_columns_back(tmp_path: Path) -> None:
+    """Injected on load, so writing them out would make the next load inject duplicates."""
+    write(tmp_path, "sheets.ric.yaml", SHEET_YAML)
+    context = load_contexts(tmp_path)["sheets.ric_q1__northern"]
+
+    body = dump_context(context)
+
+    assert "_a1_range" not in body
+    assert "workbook: RIC_Q1.xlsx" in body

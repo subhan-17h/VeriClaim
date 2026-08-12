@@ -1,0 +1,50 @@
+# Hand-authored and reviewed. Lineage columns are added on load; do not declare them here.
+schema: sheets
+table: renewals_q1__renewals
+workbook: Renewals_Q1.xlsx
+sheet: Renewals
+purpose: >-
+  Policy renewal outcomes for the quarter, one row per region and product. Retention is
+  the share of policies due for renewal that were renewed, which is how the business reads
+  the customer consequences of a claims experience.
+columns:
+  - name: region
+    type: text
+    meaning: The region the figures cover, written as a label rather than a key.
+  - name: product
+    type: text
+    meaning: The product the figures cover, written as a label rather than a key.
+  - name: due_for_renewal
+    type: numeric
+    meaning: Policies whose cover expired during the quarter.
+  - name: renewed
+    type: numeric
+    meaning: Of those, how many were renewed. Never more than due_for_renewal.
+  - name: retention_rate
+    type: numeric
+    meaning: renewed divided by due_for_renewal, stored as a fraction between 0 and 1.
+useful_for:
+  - Which regions or products are losing customers at renewal.
+  - Reading a retention fall against a claims or compliance finding for the same region.
+synonyms:
+  - term: retention
+    maps_to: retention_rate
+  - term: lapsed
+    maps_to: due_for_renewal
+cautions:
+  - >-
+    retention_rate is a fraction, not a percentage.
+  - >-
+    A policy not renewed is not the same as a policy lapsed mid-term; ops.policies.status
+    records the latter and the two counts will not agree.
+invariants:
+  - kind: ordered
+    lower: renewed
+    upper: due_for_renewal
+    meaning: More policies cannot be renewed than were due for renewal.
+  - kind: non_negative
+    column: due_for_renewal
+    meaning: A count of policies cannot be negative.
+  - kind: non_negative
+    column: renewed
+    meaning: A count of renewals cannot be negative.

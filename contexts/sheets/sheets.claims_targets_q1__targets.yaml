@@ -1,0 +1,41 @@
+# Hand-authored and reviewed. Lineage columns are added on load; do not declare them here.
+schema: sheets
+table: claims_targets_q1__targets
+workbook: Claims_Targets_Q1.xlsx
+sheet: Targets
+purpose: >-
+  The quarter's claim-volume and cost targets by region, as the planning team set them.
+  Targets are intentions; ops.claims records what happened. Comparing the two is the point
+  of this table, and confusing them is the way to report a plan as an outcome.
+columns:
+  - name: region
+    type: text
+    meaning: The region the target applies to, written as a label rather than a key.
+  - name: target_claims
+    type: numeric
+    meaning: The number of claims the quarter was planned around.
+  - name: target_incurred_pkr
+    type: numeric
+    meaning: The claim cost the quarter was planned around, in rupees.
+    unit: PKR
+useful_for:
+  - Comparing planned claim volume or cost against what ops.claims actually recorded.
+synonyms:
+  - term: budget
+    maps_to: target_incurred_pkr
+  - term: plan
+    maps_to: target_claims
+cautions:
+  - >-
+    Every figure here is a target, never an actual. A sentence reporting target_claims as
+    the number of claims filed is wrong even though the number is real.
+  - >-
+    The actuals live in ops.claims. Answering a "did we hit target" question needs both
+    sources, and the answer must say which number came from which.
+invariants:
+  - kind: non_negative
+    column: target_claims
+    meaning: A planned claim count cannot be negative.
+  - kind: non_negative
+    column: target_incurred_pkr
+    meaning: A planned cost cannot be negative.

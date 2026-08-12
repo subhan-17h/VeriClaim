@@ -150,7 +150,9 @@ test rejects **before** execution.
 - [x] **C-6.3** Type coercion — currency, percent, separators, NULL sentinels, mixed columns. — `N`
       (Built before C-6.2, which uses it: a commit that does not work on its own is not a
       reviewable increment.)
-- [ ] **C-6.4** `sheets/contexts/*.yaml`. — `V` pattern
+- [x] **C-6.4** `contexts/sheets/*.yaml` + spreadsheet-aware `SchemaContext`. — `V` pattern
+      (A context declaring a `workbook` gets the five lineage columns injected on load, so the
+      allow-list permits the very columns a citation is built from and six files cannot drift.)
 - [ ] **C-6.5** `sheets/tool.py` — shared validator/executor, `SpreadsheetLocator` from lineage. — `N`
 
 **Acceptance:** a spreadsheet answer cites workbook › sheet › row › A1, and that range genuinely

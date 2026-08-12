@@ -35,6 +35,44 @@ from vericlaim.sql.validator import AllowedTable
 SUMMARY_VALUE_LIMIT = 19
 SUMMARY_VALUE_LENGTH = 32
 
+# The provenance columns every spreadsheet-backed table carries, and what the planner is
+# told they mean. Injected on load rather than declared in each context file: they are
+# identical everywhere, so writing them out by hand in every file is one chance per file
+# to get one wrong, and they must be in the allow-list or the spreadsheet tool cannot
+# select the very columns its citation is built from. Their names are prefixed so they
+# cannot collide with a column an analyst named.
+LINEAGE_COLUMNS: tuple[tuple[str, str, str], ...] = (
+    (
+        "_workbook",
+        "text",
+        "The workbook file this row was read from. Lineage, not data: never group or "
+        "filter on it unless the question is about a particular file.",
+    ),
+    (
+        "_sheet",
+        "text",
+        "The sheet within the workbook this row was read from. Lineage, not data.",
+    ),
+    (
+        "_row",
+        "integer",
+        "The row number in the sheet this row was read from, counting from 1 as the "
+        "spreadsheet does. Lineage, not data.",
+    ),
+    (
+        "_a1_range",
+        "text",
+        "The A1 range of the cells this row was read from, for example B14:F14. This is "
+        "what the answer cites, so select it whenever rows are being reported.",
+    ),
+    (
+        "_generation",
+        "text",
+        "A hash of the workbook contents this row was loaded from. Lineage, not data.",
+    ),
+)
+LINEAGE_COLUMN_NAMES = tuple(name for name, _, _ in LINEAGE_COLUMNS)
+
 
 class ContextError(ValueError):
     """Raised for a context that cannot be trusted to describe the database.
@@ -146,6 +184,11 @@ class SchemaContext:
     table: str
     purpose: str
     columns: tuple[ColumnContext, ...]
+    # Set only for a table ingested from a spreadsheet. Its presence is what makes the
+    # table a distinct, cell-citable source rather than more SQL: the workbook and sheet
+    # are half of every citation this table's rows can carry.
+    workbook: str | None = None
+    sheet: str | None = None
     useful_for: tuple[str, ...] = ()
     synonyms: tuple[Synonym, ...] = ()
     joins: tuple[Join, ...] = ()
@@ -160,6 +203,10 @@ class SchemaContext:
     @property
     def qualified(self) -> str:
         return f"{self.schema}.{self.table}"
+
+    @property
+    def is_spreadsheet(self) -> bool:
+        return self.workbook is not None
 
     @property
     def column_names(self) -> tuple[str, ...]:
@@ -219,10 +266,26 @@ def _parse(path: Path) -> SchemaContext:
     purpose = _require_str(raw, "purpose", path)
     where = f"{path.name} ({schema}.{table})"
 
+    workbook = raw.get("workbook")
+    sheet = raw.get("sheet")
+    if workbook is not None and not isinstance(sheet, str):
+        raise ContextError(f"{where}: a workbook-backed table must also name its 'sheet'")
+
     raw_columns = raw.get("columns")
     if not isinstance(raw_columns, list) or not raw_columns:
         raise ContextError(f"{where}: columns must be a non-empty list")
     columns = tuple(_parse_column(entry, where) for entry in raw_columns)
+    if workbook is not None:
+        declared = {column.name for column in columns}
+        overlap = sorted(declared & set(LINEAGE_COLUMN_NAMES))
+        if overlap:
+            raise ContextError(
+                f"{where}: lineage columns are added automatically; remove {', '.join(overlap)}"
+            )
+        columns += tuple(
+            ColumnContext(name=name, type=type_, meaning=meaning)
+            for name, type_, meaning in LINEAGE_COLUMNS
+        )
 
     names = {column.name for column in columns}
     synonyms = tuple(_parse_synonym(entry, where, names) for entry in raw.get("synonyms") or ())
@@ -233,6 +296,8 @@ def _parse(path: Path) -> SchemaContext:
         table=table,
         purpose=purpose,
         columns=columns,
+        workbook=workbook,
+        sheet=sheet,
         useful_for=tuple(str(item) for item in raw.get("useful_for") or ()),
         synonyms=synonyms,
         joins=joins,

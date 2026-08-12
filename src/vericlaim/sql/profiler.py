@@ -26,6 +26,7 @@ import yaml
 from psycopg import sql
 
 from vericlaim.sql.contexts import (
+    LINEAGE_COLUMN_NAMES,
     ColumnStats,
     ContextError,
     Invariant,
@@ -199,8 +200,17 @@ def dump_context(context: SchemaContext) -> str:
         "schema": context.schema,
         "table": context.table,
         "purpose": context.purpose,
-        "columns": [_dump_column(column) for column in context.columns],
+        # The lineage columns are injected on load. Writing them out would make the next
+        # load reject the file for declaring them twice.
+        "columns": [
+            _dump_column(column)
+            for column in context.columns
+            if column.name not in LINEAGE_COLUMN_NAMES
+        ],
     }
+    if context.workbook is not None:
+        body["workbook"] = context.workbook
+        body["sheet"] = context.sheet
     if context.useful_for:
         body["useful_for"] = list(context.useful_for)
     if context.synonyms:

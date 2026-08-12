@@ -161,6 +161,9 @@ class Settings(BaseSettings):
     # root rather than inside the package because they are human-reviewed artefacts that
     # get read in diffs, and because the sheets contexts sit beside them.
     sql_context_dir: Path = PROJECT_ROOT / "contexts" / "sql"
+    # Spreadsheets are served through the same validator and executor, but their contexts
+    # live apart so a reviewer can see at a glance which tables are somebody's workbook.
+    sheets_context_dir: Path = PROJECT_ROOT / "contexts" / "sheets"
 
     # --- SQL safety -------------------------------------------------------
     sql_row_limit: int = 500

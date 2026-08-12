@@ -1,0 +1,60 @@
+# Hand-authored and reviewed. Lineage columns are added on load; do not declare them here.
+schema: sheets
+table: loss_ratio_report__loss_ratio
+workbook: Loss_Ratio_Report.xlsx
+sheet: Loss Ratio
+purpose: >-
+  Loss ratio by region and product for the period, as finance reports it. Loss ratio is
+  incurred claim cost divided by earned premium: the single number the business uses to
+  say whether a book of policies is profitable.
+columns:
+  - name: region
+    type: text
+    meaning: The region the figures cover, written as a label rather than a key.
+  - name: product
+    type: text
+    meaning: >-
+      The product name as finance writes it. Matches ops.coverage_products.product_name by
+      spelling, not by key.
+  - name: earned_premium_pkr
+    type: numeric
+    meaning: Premium earned over the period. The denominator of the loss ratio.
+    unit: PKR
+  - name: incurred_claims_pkr
+    type: numeric
+    meaning: >-
+      Claim cost incurred over the period. The numerator. Compiled from the claims system
+      and may differ slightly from a live sum over ops.claims.
+    unit: PKR
+  - name: loss_ratio
+    type: numeric
+    meaning: >-
+      incurred_claims_pkr divided by earned_premium_pkr, stored as a fraction. A value
+      above 1 means claims cost more than the premium brought in.
+useful_for:
+  - Which regions or products are running at a loss, and by how much.
+  - Putting a claim-volume finding in financial terms.
+synonyms:
+  - term: loss ratio
+    maps_to: loss_ratio
+  - term: premium
+    maps_to: earned_premium_pkr
+cautions:
+  - >-
+    loss_ratio is a fraction, not a percentage. 1.15 means 115%, and reporting it as
+    "1.15%" understates a loss-making book as an excellent one.
+  - >-
+    A loss ratio may not be averaged across rows. The ratio of two sums is not the mean of
+    the ratios, and the difference grows with how unequal the premiums are. Sum the
+    numerator and the denominator, then divide.
+  - >-
+    These are finance's compiled figures. A live sum over ops.claims answers a related but
+    different question, and where the two disagree the answer should say so rather than
+    pick one.
+invariants:
+  - kind: non_negative
+    column: earned_premium_pkr
+    meaning: Premium earned cannot be negative.
+  - kind: non_negative
+    column: loss_ratio
+    meaning: A loss ratio cannot be negative.

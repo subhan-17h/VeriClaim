@@ -1,0 +1,46 @@
+# Hand-authored and reviewed. Lineage columns are added on load; do not declare them here.
+schema: sheets
+table: risk_categories__categories
+workbook: Risk_Categories.xlsx
+sheet: Categories
+purpose: >-
+  The underwriting team's risk banding for property types, one row per category. A
+  reference table rather than a report: it says how a category is rated and what loading
+  it carries, and it is the bridge between a claim's property type and how it was priced.
+columns:
+  - name: category
+    type: text
+    meaning: The risk category name, for example "Older masonry" or "High-rise apartment".
+  - name: risk_band
+    type: text
+    meaning: The band the category sits in - low, medium, high or very high.
+  - name: premium_loading
+    type: numeric
+    meaning: >-
+      The multiplier applied to base premium for this category, stored as a fraction where
+      0.15 means a 15% loading, not a 15x one.
+  - name: notes
+    type: text
+    meaning: >-
+      Free text from the underwriting review. Useful for context, but it is a comment
+      somebody wrote, not evidence about any particular property.
+useful_for:
+  - Explaining why one class of property is priced differently from another.
+  - Grouping claims by the risk band of the property involved.
+synonyms:
+  - term: loading
+    maps_to: premium_loading
+  - term: band
+    maps_to: risk_band
+cautions:
+  - >-
+    premium_loading is an increment expressed as a fraction. Treating 0.15 as a multiplier
+    would price a policy at fifteen percent of its base premium instead of a hundred and
+    fifteen.
+  - >-
+    A risk band is an underwriting judgement made in advance. It says nothing about
+    whether any individual claim is covered.
+invariants:
+  - kind: non_negative
+    column: premium_loading
+    meaning: A premium loading is an increase; it is never negative in this book.

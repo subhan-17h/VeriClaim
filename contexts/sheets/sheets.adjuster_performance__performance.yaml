@@ -1,0 +1,47 @@
+# Hand-authored and reviewed. Lineage columns are added on load; do not declare them here.
+schema: sheets
+table: adjuster_performance__performance
+workbook: Adjuster_Performance.xlsx
+sheet: Performance
+purpose: >-
+  A management report on adjuster workload and turnaround, one row per adjuster. Compiled
+  by hand from the claims system, so it is a snapshot that can disagree with ops.claims;
+  where it does, both figures are reportable and neither is silently preferred.
+columns:
+  - name: adjuster
+    type: text
+    meaning: >-
+      The adjuster's name as typed in the report. Matches ops.adjusters.adjuster_name by
+      spelling, not by key.
+  - name: region
+    type: text
+    meaning: The adjuster's base region, which is not necessarily where their claims occurred.
+  - name: claims_handled
+    type: numeric
+    meaning: Claims assigned to this adjuster during the period the report covers.
+  - name: average_days_to_close
+    type: numeric
+    meaning: Mean days from assignment to closure, over the claims this adjuster closed.
+useful_for:
+  - Comparing adjuster workload or turnaround across a region.
+  - Explaining a slow-moving claim by the load on the adjuster handling it.
+synonyms:
+  - term: turnaround
+    maps_to: average_days_to_close
+  - term: caseload
+    maps_to: claims_handled
+cautions:
+  - >-
+    The region here is the adjuster's base, not the region a claim occurred in. Grouping
+    claim volumes by this column answers a different question from grouping by
+    ops.claims.region_id.
+  - >-
+    average_days_to_close is already an average. Averaging it across adjusters weights
+    every adjuster equally regardless of caseload, which is usually not what was asked.
+invariants:
+  - kind: non_negative
+    column: claims_handled
+    meaning: A caseload cannot be negative.
+  - kind: non_negative
+    column: average_days_to_close
+    meaning: A turnaround time cannot be negative.

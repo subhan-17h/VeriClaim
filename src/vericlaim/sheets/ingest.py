@@ -36,13 +36,14 @@ from vericlaim.sheets.profiler import (
     normalize_name,
     profile_workbook,
 )
+from vericlaim.sql.contexts import LINEAGE_COLUMN_NAMES
 from vericlaim.sql.db import Database
 
 SHEETS_SCHEMA = "sheets"
 
-# The provenance every ingested row carries. Prefixed so they cannot collide with a column
-# an analyst named, and so a schema context can describe them as lineage rather than data.
-LINEAGE_COLUMNS = ("_workbook", "_sheet", "_row", "_a1_range", "_generation")
+# The provenance every ingested row carries, taken from the one place it is defined, so
+# the columns the ingest writes and the columns a schema context describes cannot drift.
+LINEAGE_COLUMNS = LINEAGE_COLUMN_NAMES
 LINEAGE_TYPES = {
     "_workbook": "TEXT",
     "_sheet": "TEXT",

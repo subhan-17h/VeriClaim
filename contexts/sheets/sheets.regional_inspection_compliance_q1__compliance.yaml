@@ -1,0 +1,65 @@
+# Hand-authored and reviewed. Statistics blocks are machine-refreshed by
+# `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
+# The `_workbook`, `_sheet`, `_row`, `_a1_range` and `_generation` columns are added on
+# load and must not be declared here.
+schema: sheets
+table: regional_inspection_compliance_q1__compliance
+workbook: Regional_Inspection_Compliance_Q1.xlsx
+sheet: Compliance
+purpose: >-
+  The Q1 inspection-compliance return, one row per region. Compliance is the share of
+  scheduled property inspections that were actually carried out, which is the operational
+  metric a claims pattern is most often read against - a region whose inspections lapsed
+  and whose claims then rose is a correlation the answer may report but must not present
+  as cause.
+columns:
+  - name: region
+    type: text
+    meaning: >-
+      The region name as the operations team writes it. It matches ops.regions.region_name
+      but is a label typed into a spreadsheet, not a foreign key, so a region absent from
+      one side is possible and is a finding rather than an error.
+  - name: scheduled_inspections
+    type: numeric
+    meaning: Inspections the quarter's plan called for.
+  - name: completed_inspections
+    type: numeric
+    meaning: Inspections actually carried out. Never more than scheduled.
+  - name: compliance_rate
+    type: numeric
+    meaning: >-
+      completed divided by scheduled, stored as a fraction between 0 and 1. Displayed in
+      the workbook as a percentage, so 0.61 is the figure a reader sees as 61%.
+  - name: target_rate
+    type: numeric
+    meaning: The quarter's target, also a fraction. The gap to compliance_rate is the miss.
+useful_for:
+  - Which regions missed their inspection-compliance target, and by how much.
+  - Reading an operational lapse against a change in claim volume for the same region.
+synonyms:
+  - term: inspection compliance
+    maps_to: compliance_rate
+  - term: target
+    maps_to: target_rate
+cautions:
+  - >-
+    compliance_rate and target_rate are fractions, not percentages. Reporting 0.61 as
+    "0.61%" is wrong by two orders of magnitude and reads as a catastrophic failure.
+  - >-
+    The region column is a typed label, not a key into ops.regions. Join on the name only
+    when the question needs both sources, and report a name present in one and not the
+    other rather than dropping it.
+  - >-
+    A missed target is an operational fact. It is not evidence that any particular claim
+    should or should not be paid.
+invariants:
+  - kind: ordered
+    lower: completed_inspections
+    upper: scheduled_inspections
+    meaning: More inspections cannot be completed than were scheduled.
+  - kind: non_negative
+    column: scheduled_inspections
+    meaning: A count of planned inspections cannot be negative.
+  - kind: non_negative
+    column: completed_inspections
+    meaning: A count of completed inspections cannot be negative.
