@@ -43,6 +43,7 @@ from vericlaim.orchestrator.nodes.route import route as route_node
 from vericlaim.orchestrator.nodes.sufficiency import sufficiency as sufficiency_node
 from vericlaim.orchestrator.nodes.synthesize import synthesize as synthesize_node
 from vericlaim.orchestrator.nodes.understand import understand as understand_node
+from vericlaim.orchestrator.nodes.verify import verify as verify_node
 from vericlaim.orchestrator.sources import SourceCapability, load_capabilities
 from vericlaim.orchestrator.state import GraphState, StageRecord
 
@@ -69,6 +70,7 @@ def build_graph(
     collect: Node | None = None,
     sufficiency: Node | None = None,
     synthesize: Node | None = None,
+    verify: Node | None = None,
     gateway: Any | None = None,
 ) -> Any:
     """Compile the graph for one question, over the given source tools.
@@ -87,6 +89,7 @@ def build_graph(
     collect = collect or collect_node
     sufficiency = sufficiency or functools.partial(sufficiency_node, gateway=gateway)
     synthesize = synthesize or functools.partial(synthesize_node, gateway=gateway)
+    verify = verify or functools.partial(verify_node, gateway=gateway)
 
     graph = StateGraph(GraphState)
     graph.add_node("understand", _as_graph_node(understand))
@@ -95,6 +98,10 @@ def build_graph(
     graph.add_node("collect", _as_graph_node(collect))
     graph.add_node("sufficiency", _as_graph_node(sufficiency))
     graph.add_node("synthesize", _as_graph_node(synthesize))
+    # Verification's one regeneration happens inside the node rather than as a second
+    # edge into synthesis. It is a correction of one answer, not another pass over the
+    # question, and modelling it as a cycle would let it interleave with the replan loop.
+    graph.add_node("verify", _as_graph_node(verify))
     for source in capabilities:
         graph.add_node(_node_name(source), _source_node(source, tools))
 
@@ -119,7 +126,8 @@ def build_graph(
     graph.add_conditional_edges(
         "sufficiency", _replan, {"plan": "plan", "synthesize": "synthesize"}
     )
-    graph.add_edge("synthesize", END)
+    graph.add_edge("synthesize", "verify")
+    graph.add_edge("verify", END)
 
     return graph.compile()
 

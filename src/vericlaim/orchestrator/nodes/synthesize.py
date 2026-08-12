@@ -88,6 +88,10 @@ never recommend that outcome. Evidence may be described as consistent with, or n
 consistent with, the terms quoted -- the determination itself rests with the team handling
 the case, and the answer should say so where the question invites one.
 
+If `correction` is not empty, your previous answer failed verification and it describes
+exactly what was wrong. Fix precisely those problems and change nothing else: rewriting
+the parts that were accepted risks breaking them.
+
 Answer in plain prose, as briefly as the question allows, in the shape
 `expected_answer_shape` describes. No preamble about what you were asked or how you
 searched.
@@ -95,7 +99,9 @@ searched.
 
 
 @traced(STAGE, run_type="chain", tags=["orchestrator"])
-def synthesize(state: GraphState, *, gateway: Any | None = None) -> GraphState:
+def synthesize(
+    state: GraphState, *, gateway: Any | None = None, correction: str = ""
+) -> GraphState:
     """Write the answer, or state plainly why there is not one."""
     if state.routing is None:
         raise ValueError("Synthesis needs a routing decision to answer against")
@@ -123,6 +129,9 @@ def synthesize(state: GraphState, *, gateway: Any | None = None) -> GraphState:
         ),
         "unreachable_sources": list(state.collection.get("failed_sources") or ()),
         "known_gaps": list(state.sufficiency.get("gaps") or ()),
+        # Set only on a second attempt, by verification, naming what was wrong with the
+        # first one. Empty on the first pass.
+        "correction": correction,
     }
     messages = [
         {"role": "system", "content": SYNTHESIZE_SYSTEM_PROMPT},

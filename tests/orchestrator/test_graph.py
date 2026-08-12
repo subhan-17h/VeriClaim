@@ -138,6 +138,7 @@ class ScriptedNodes:
         self.insufficient_passes = insufficient_passes
         self.assessed = 0
         self.synthesized = 0
+        self.verified = 0
         self.hints: list[str] = []
 
     def understand(self, state: GraphState, **_: Any) -> GraphState:
@@ -183,6 +184,12 @@ class ScriptedNodes:
             StageRecord(name="synthesize")
         )
 
+    def verify(self, state: GraphState, **_: Any) -> GraphState:
+        self.verified += 1
+        return state.with_(
+            citations={"ok": True, "verified": True, "resolved": ["E1"]}
+        ).with_stage(StageRecord(name="verify"))
+
     def sufficiency(self, state: GraphState, **_: Any) -> GraphState:
         """Stand in for the real verdict, applying the same bound it does."""
         self.assessed += 1
@@ -214,6 +221,7 @@ def run(
         plan=nodes.plan,
         sufficiency=nodes.sufficiency,
         synthesize=nodes.synthesize,
+        verify=nodes.verify,
     )
     return run_question(graph, question)
 
@@ -306,7 +314,7 @@ def test_every_source_that_ran_is_recorded_as_its_own_stage() -> None:
         f"{SOURCE_STAGE_PREFIX}policy",
         f"{SOURCE_STAGE_PREFIX}sql",
     }
-    assert names[5:] == ["collect", "sufficiency", "synthesize"]
+    assert names[5:] == ["collect", "sufficiency", "synthesize", "verify"]
 
 
 # ------------------------------------------------------------------ a source that fails
@@ -456,10 +464,11 @@ def test_what_the_sources_returned_is_collected_into_one_account() -> None:
 
     assert state.collection["by_source"] == {"policy": 1}
     assert state.collection["silent_sources"] == ["sql"]
-    assert [record.name for record in state.stages[-3:]] == [
+    assert [record.name for record in state.stages[-4:]] == [
         "collect",
         "sufficiency",
         "synthesize",
+        "verify",
     ]
 
 
@@ -475,6 +484,7 @@ def test_a_question_that_never_fanned_out_is_never_collected() -> None:
         "route",
         "plan",
         "synthesize",
+        "verify",
     ]
     assert state.collection == {}
 
@@ -530,3 +540,16 @@ def test_a_question_that_stops_early_still_gets_an_answer() -> None:
     assert nodes.synthesized == 1
     assert state.answer
     assert not any(tool.called for tool in tools.values())
+
+
+def test_the_answer_is_checked_before_the_run_ends() -> None:
+    """Nothing leaves the graph unverified. The last thing that happens to an answer is
+    that its citations are resolved against the evidence it was written from."""
+    tools = {name: RecordingTool([policy_evidence()]) for name in CAPABILITIES}
+    nodes = ScriptedNodes(sources=("policy",))
+
+    state = run(tools, nodes)
+
+    assert nodes.verified == 1
+    assert state.citations["verified"] is True
+    assert state.stages[-1].name == "verify"

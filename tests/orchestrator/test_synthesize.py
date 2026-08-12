@@ -401,3 +401,13 @@ def test_the_prompt_names_no_table_or_column_of_the_corpus() -> None:
     )
 
     assert named == []
+
+
+def test_a_correction_from_verification_reaches_the_second_attempt() -> None:
+    """The rewrite has to know what was wrong with the first answer, or it produces a
+    different answer with the same fault."""
+    gateway = FakeGateway()
+
+    synthesize(state_with(), gateway=gateway, correction="[E9] does not exist.")
+
+    assert sent_payload(gateway)["correction"] == "[E9] does not exist."
