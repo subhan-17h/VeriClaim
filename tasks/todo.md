@@ -141,7 +141,7 @@ test rejects **before** execution.
 
 ## Phase C-6 — Spreadsheets (source 3)
 
-- [ ] **C-6.1** `sheets/profiler.py` — merged ranges, stacked headers, TOTAL footers, multi-table
+- [x] **C-6.1** `sheets/profiler.py` — merged ranges, stacked headers, TOTAL footers, multi-table
       sheets, sentinels, currency/percent formats. — `N`
 - [ ] **C-6.2** `sheets/ingest.py` — `sheets.*` schema with `_workbook`/`_sheet`/`_row`/`_a1_range`
       lineage; non-destructive generation-tagged ingest. — `A` unibot header detection, rest `N`
