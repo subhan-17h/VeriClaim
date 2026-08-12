@@ -309,6 +309,60 @@ def context_summary(context: SchemaContext) -> dict[str, Any]:
     }
 
 
+def context_detail(context: SchemaContext) -> dict[str, Any]:
+    """Return the planning view of a context: everything reviewed about one table.
+
+    Where :func:`context_summary` trades detail for prompt space -- the router is shown
+    every context on every question -- the planner and generator are shown only the
+    tables the router chose, so nothing is dropped here. The parts the summary omits are
+    exactly the ones that decide whether generated SQL is *right* rather than merely
+    valid: a column's unit, its observed range, what a join actually means, and the
+    cautions that distinguish two columns a question could plausibly mean.
+    """
+    return {
+        "table": context.qualified,
+        "purpose": context.purpose,
+        "columns": [_detail_column(column) for column in context.columns],
+        "useful_for": list(context.useful_for),
+        "synonyms": [
+            {"term": synonym.term, "maps_to": synonym.maps_to}
+            for synonym in context.synonyms
+        ],
+        "joins": [
+            {
+                "column": join.column,
+                "references": join.references,
+                "meaning": join.meaning,
+            }
+            for join in context.joins
+        ],
+        "cautions": list(context.cautions),
+    }
+
+
+def _detail_column(column: ColumnContext) -> dict[str, Any]:
+    detail: dict[str, Any] = {
+        "name": column.name,
+        "type": column.type,
+        "meaning": column.meaning,
+    }
+    if column.unit:
+        detail["unit"] = column.unit
+    if column.sample_values:
+        detail["sample_values"] = list(column.sample_values)
+    if column.value_set is not None:
+        detail["value_set"] = list(column.value_set)
+    if column.stats is not None:
+        detail["stats"] = {
+            "total_count": column.stats.total_count,
+            "distinct_count": column.stats.distinct_count,
+            "null_count": column.stats.null_count,
+            "minimum": column.stats.minimum,
+            "maximum": column.stats.maximum,
+        }
+    return detail
+
+
 def _summary_column(column: ColumnContext) -> dict[str, Any]:
     summary: dict[str, Any] = {
         "name": column.name,

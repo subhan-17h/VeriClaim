@@ -109,6 +109,9 @@ tasks:
   verify: strong
   # --- nl2sql subsystem ---
   sql_table_select: cheap
+  # Planning decides answerability and the join path; a wrong plan is a confident wrong
+  # number, so this is the one SQL step that gets the strong tier.
+  sql_planner: strong
   sql_generator: mid
   sql_refiner: mid
   sql_unit_tester: mid

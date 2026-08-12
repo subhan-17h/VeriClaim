@@ -18,10 +18,14 @@ from dataclasses import dataclass, field
 import pytest
 
 from vericlaim.sql.resolver import (
+    EntityResolution,
+    Match,
+    Resolution,
     fuzzy_rewrite_sql,
     normalize,
     resolve_entities,
     resolve_mention,
+    stored_values,
     strip_noise,
 )
 from vericlaim.sql.values_catalog import CatalogValue, ReferenceMatch, reference_key
@@ -327,3 +331,40 @@ def test_a_reference_is_recognized_however_it_is_punctuated(mention: str) -> Non
     )
 
     assert resolve_mention(mention, catalog).status == "resolved"
+
+
+# ------------------------------------------------------------------ prompt payload
+
+
+def test_only_grounded_mentions_become_stored_values() -> None:
+    """An ambiguous mention offered to the planner reads as a value the database holds,
+    and the question of which one was meant disappears."""
+    resolved = EntityResolution(
+        mentions=(
+            Resolution(
+                mention="water damage",
+                status="resolved",
+                matches=(Match("ops.claims", "peril", ("water_damage",), "equals", 1.0),),
+            ),
+            Resolution(
+                mention="Ahmed",
+                status="ambiguous",
+                candidates=("Ahmed Textiles", "Ahmed Traders"),
+            ),
+            Resolution(mention="Zephyr", status="not_found"),
+        )
+    )
+
+    assert stored_values(resolved) == [
+        {
+            "mention": "water damage",
+            "table": "ops.claims",
+            "column": "peril",
+            "values": ["water_damage"],
+            "match_kind": "equals",
+        }
+    ]
+
+
+def test_a_question_with_nothing_to_ground_offers_nothing() -> None:
+    assert stored_values(None) == []

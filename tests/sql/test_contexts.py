@@ -20,6 +20,7 @@ import pytest
 from vericlaim.sql.contexts import (
     ContextError,
     allow_list,
+    context_detail,
     context_summary,
     load_contexts,
 )
@@ -298,3 +299,36 @@ def test_the_summary_keeps_the_cautions(context_dir) -> None:
     summary = context_summary(load_contexts(context_dir)["ops.claims"])
 
     assert summary["cautions"] == ["Incurred is not paid."]
+
+
+
+# ------------------------------------------------------------------ planning view
+
+
+def test_the_planning_view_keeps_what_the_summary_drops(context_dir) -> None:
+    """The router sees every context on every question and gets the summary. The planner
+    sees only the chosen tables, and needs the units the summary drops."""
+    claims = load_contexts(context_dir)["ops.claims"]
+
+    detail = context_detail(claims)
+    incurred = next(
+        column for column in detail["columns"] if column["name"] == "incurred_amount_pkr"
+    )
+
+    assert incurred["unit"] == "PKR"
+    assert incurred["meaning"] == "Estimated ultimate cost."
+
+
+def test_a_join_carries_its_meaning_to_the_planner(context_dir) -> None:
+    """The summary gives the router the key; the planner needs to know what it means."""
+    claims = load_contexts(context_dir)["ops.claims"]
+
+    joins = context_detail(claims)["joins"]
+
+    assert joins[0]["meaning"] == "Each claim belongs to exactly one policy."
+
+
+def test_the_cautions_reach_the_planner_intact(context_dir) -> None:
+    claims = load_contexts(context_dir)["ops.claims"]
+
+    assert context_detail(claims)["cautions"] == ["Incurred is not paid."]

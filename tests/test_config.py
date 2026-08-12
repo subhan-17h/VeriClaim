@@ -172,6 +172,7 @@ class TestShippedRoutingTable:
             "synthesize",
             "verify",
             "sql_table_select",
+            "sql_planner",
             "sql_generator",
             "sql_refiner",
             "ocr_vision",

@@ -284,6 +284,30 @@ def _append_mention(mentions: list[str], value: Any) -> None:
         mentions.append(value.strip())
 
 
+def stored_values(resolved: EntityResolution | None) -> list[dict[str, Any]]:
+    """Flatten grounded mentions into the spelling inventory a prompt is shown.
+
+    Only resolved mentions travel. An ambiguous or not-found mention offered to the
+    planner or the generator would read as a value the database holds -- the question of
+    which one was meant would disappear, and the filter written from it would match
+    nothing while looking deliberate.
+    """
+    if resolved is None:
+        return []
+    return [
+        {
+            "mention": resolution.mention,
+            "table": match.table,
+            "column": match.column,
+            "values": list(match.values),
+            "match_kind": match.match_kind,
+        }
+        for resolution in resolved.mentions
+        if resolution.status == "resolved"
+        for match in resolution.matches
+    ]
+
+
 def _clarification_question(result: Resolution) -> str:
     options = " or ".join(f'"{candidate}"' for candidate in result.candidates)
     return f'Did you mean {options} for "{result.mention}"?'

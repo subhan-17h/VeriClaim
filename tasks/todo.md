@@ -109,8 +109,12 @@ confidence and cites by page; CSRS's silent zero-chunk path proven closed by tes
       path, **generation-keyed cache** replacing the un-invalidated global. — `A` unibot
       (References are looked up **exactly, in the database**, and never fall through to fuzzy
       matching; the embedding fallback is dropped — grounding here is deterministic.)
-- [ ] **C-5.6** `sql/planner.py` + `generator.py` — structure kept, **all academic prompts
+- [x] **C-5.6** `sql/planner.py` + `generator.py` — structure kept, **all academic prompts
       rewritten**. — `A` structure, `N` prompts
+      (The new prompts are **domain-free**: the insurance rules stay in the reviewed
+      contexts' `cautions`, which the prompts make binding, so the knowledge has one home.
+      A step's tables must be connected by declared joins — a check the reference could not
+      have had, with one table per context and no joins at all.)
 - [ ] **C-5.7** `sql/observer.py` — deterministic verdicts + insurance shape checks. — `A` unibot
 - [ ] **C-5.8** `sql/refiner.py` + `sql/pipeline.py` — bounded repair loop + **per-step wall-clock
       budget**. — `A` unibot
