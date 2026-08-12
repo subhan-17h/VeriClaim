@@ -497,3 +497,45 @@ injects rather than patches. `StepOutcome.selection` carries how a candidate was
 including a note when arbitration could not be reached, which C-9.3 exposes on the trace.
 
 **No lessons recorded.** No user corrections during this phase.
+
+### Phase C-6 — closed
+
+**Delivered.** Messy workbooks become queryable with cell-level citation. A structural
+profiler that reads banners, stacked headers, TOTAL footers, spacer columns and sentinels;
+coercion that turns a displayed cell into a value without losing its sign or its magnitude;
+an atomic ingest into `sheets.*` with lineage on every row; six reviewed schema contexts;
+and a tool that answers through the same audited engine as the claims database while citing
+workbook › sheet › row › A1 range.
+
+**Evidence.** `uv run pytest tests/sheets -q` → **92 passed**, twelve of them against real
+Postgres. Whole suite **1103 passed**, ruff clean.
+
+**The invariant this phase exists to protect.** Spreadsheets normalize into `sheets.*` and
+run through one audited SQL path — a second engine would be a second thing to keep safe, and
+the guarantees would drift the first time only one was fixed. What keeps them a *distinct*
+source is the citation, so evidence is emitted per row rather than per query. An aggregate
+cites the sheet rather than inventing a row: a coarser citation that checks out against the
+file beats a precise one that does not.
+
+**Departures from the reference, and why.**
+
+- *Re-ingest is atomic, not destructive.* The new table is built beside the old one and
+  swapped in inside one transaction. The reference dropped first and loaded second, so a
+  failure left no data at all. A test drives that failure and asserts the old rows survive.
+- *A merged span's value is repeated across the span.* openpyxl reports it only on the
+  top-left cell; taking that literally turns a merged header into one named column and one
+  nameless one, and a merged data cell into a NULL that was never in the file.
+- *A column's kind is decided by the majority of its values*, with the stragglers recorded.
+  The reference degraded a whole column to text on one stray word.
+- *Sentinels are set aside before anything is counted.* `N/A` is an absent number, not a
+  string; letting it vote makes every column with a gap a text column.
+- *Lineage columns are injected when a spreadsheet context loads*, not written into six
+  files by hand, and `dump_context` drops them again so a refresh cannot duplicate them.
+
+**Carried forward.** The six contexts are the contract C-8.3's generator must satisfy, and a
+test asserts each documented table name is the name the ingest will actually create. The
+profiler splits tables on blank *rows* and drops blank columns as spacers; two tables placed
+side by side on one sheet would be read as one, which the corpus does not do and the
+docstring records.
+
+**No lessons recorded.** No user corrections during this phase.
