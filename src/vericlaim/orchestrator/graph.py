@@ -37,6 +37,7 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from vericlaim.evidence import Evidence
+from vericlaim.orchestrator.nodes.collect import collect as collect_node
 from vericlaim.orchestrator.nodes.plan import plan as plan_node
 from vericlaim.orchestrator.nodes.route import route as route_node
 from vericlaim.orchestrator.nodes.understand import understand as understand_node
@@ -63,6 +64,7 @@ def build_graph(
     understand: Node | None = None,
     route: Node | None = None,
     plan: Node | None = None,
+    collect: Node | None = None,
     gateway: Any | None = None,
 ) -> Any:
     """Compile the graph for one question, over the given source tools.
@@ -78,11 +80,13 @@ def build_graph(
         route_node, capabilities=capabilities, gateway=gateway
     )
     plan = plan or functools.partial(plan_node, capabilities=capabilities, gateway=gateway)
+    collect = collect or collect_node
 
     graph = StateGraph(GraphState)
     graph.add_node("understand", _as_graph_node(understand))
     graph.add_node("route", _as_graph_node(route))
     graph.add_node("plan", _as_graph_node(plan))
+    graph.add_node("collect", _as_graph_node(collect))
     for source in capabilities:
         graph.add_node(_node_name(source), _source_node(source, tools))
 
@@ -94,8 +98,11 @@ def build_graph(
         functools.partial(_fan_out, capabilities=capabilities),
         {**{source: _node_name(source) for source in capabilities}, END: END},
     )
+    # Every branch converges on collect, which is where the separate returns become one
+    # ordered body of evidence and one account of what is missing from it.
     for source in capabilities:
-        graph.add_edge(_node_name(source), END)
+        graph.add_edge(_node_name(source), "collect")
+    graph.add_edge("collect", END)
 
     return graph.compile()
 

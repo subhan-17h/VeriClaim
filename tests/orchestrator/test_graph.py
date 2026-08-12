@@ -261,10 +261,11 @@ def test_every_source_that_ran_is_recorded_as_its_own_stage() -> None:
 
     names = [stage.name for stage in state.stages]
     assert names[:3] == ["understand", "route", "plan"]
-    assert set(names[3:]) == {
+    assert set(names[3:-1]) == {
         f"{SOURCE_STAGE_PREFIX}policy",
         f"{SOURCE_STAGE_PREFIX}sql",
     }
+    assert names[-1] == "collect"
 
 
 # ------------------------------------------------------------------ a source that fails
@@ -398,3 +399,31 @@ def test_the_tools_are_called_on_the_worker_threads_the_graph_provides() -> None
     )
 
     assert len(seen) == 2
+
+
+def test_what_the_sources_returned_is_collected_into_one_account() -> None:
+    """The branches converge on collect, so the run ends holding one ordered body of
+    evidence and one statement of what is missing from it."""
+    tools = {
+        "policy": RecordingTool([policy_evidence()]),
+        "sql": RecordingTool([]),
+        "spreadsheet": RecordingTool(),
+        "scanned_pdf": RecordingTool(),
+    }
+
+    state = run(tools, ScriptedNodes(sources=("policy", "sql")))
+
+    assert state.collection["by_source"] == {"policy": 1}
+    assert state.collection["silent_sources"] == ["sql"]
+    assert state.stages[-1].name == "collect"
+
+
+def test_a_question_that_never_fanned_out_is_never_collected() -> None:
+    """There is nothing to order and nothing to account for. A collect stage here would
+    report an emptiness that the routing decision already explains."""
+    tools = {name: RecordingTool([policy_evidence()]) for name in CAPABILITIES}
+
+    state = run(tools, ScriptedNodes(out_of_scope=True))
+
+    assert [stage.name for stage in state.stages] == ["understand", "route", "plan"]
+    assert state.collection == {}

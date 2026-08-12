@@ -115,6 +115,10 @@ class GraphState(BaseModel):
     evidence: Annotated[EvidenceSet, merge_evidence] = Field(
         default_factory=EvidenceSet
     )
+    # What the sources did and did not give: counts, the ones that were silent, the ones
+    # that could not be reached, the ones read with low confidence. Written once the
+    # fan-out is in, and read rather than recomputed by everything after it.
+    collection: dict[str, Any] = Field(default_factory=dict)
     sufficiency: dict[str, Any] = Field(default_factory=dict)
     answer: str = ""
     citations: dict[str, Any] = Field(default_factory=dict)
@@ -193,6 +197,7 @@ class GraphState(BaseModel):
             "plans": dict(self.plans),
             "evidence": self.evidence.serialize(),
             "sources_used": list(self.sources_used),
+            "collection": dict(self.collection),
             "sufficiency": dict(self.sufficiency),
             "answer": self.answer,
             "citations": dict(self.citations),
