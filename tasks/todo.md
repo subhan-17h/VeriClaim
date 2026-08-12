@@ -132,7 +132,9 @@ confidence and cites by page; CSRS's silent zero-chunk path proven closed by tes
       arbiter enforces what a reviewer wrote. A candidate the observer already rejected never
       gets a vote. Arbitration failure degrades to the deterministic pick, logged and named in
       the selection — the reference swallowed it without a word.)
-- [ ] **C-5.10** `sql/tool.py` — `query_claims_db() -> list[Evidence]` carrying the executed SQL. — `N`
+- [x] **C-5.10** `sql/tool.py` — `query_claims_db() -> list[Evidence]` carrying the executed SQL. — `N`
+      (Zero rows is citable evidence, not an absent answer; an unanswerable question and a
+      question whose entity is ambiguous both refuse **by name** rather than returning `[]`.)
 
 **Acceptance:** `tests/sql` green; `smoke.py` proves DDL rejected at the DB level; every unsafe-SQL
 test rejects **before** execution.
