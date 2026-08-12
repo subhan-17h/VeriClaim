@@ -430,3 +430,62 @@ directly rather than trusting the confidence score, and C-8.4's degraded documen
 assumed to self-identify.
 
 **No lessons recorded.** No user corrections during this phase.
+
+### Phase C-5 — closed
+
+**Delivered.** A natural-language question becomes safe, validated, read-only SQL over a
+documented relational schema, and comes back as evidence carrying the exact query that
+produced it. Postgres behind a genuinely read-only role; a pooled, time-bounded connection;
+the sqlglot AST validator; seven reviewed schema contexts; deterministic entity grounding;
+an answerability gate with a join-graph check; a generator; a deterministic observer;
+a bounded repair loop; candidate arbitration; and the tool boundary.
+
+**Evidence.** `uv run pytest tests/sql -q` → **349 passed** (46 of them the unsafe-SQL
+rejection suite, every one rejecting *before* execution). `uv run python scripts/smoke.py` →
+**7 PASS, exit 0**: the read-only role reads the corpus and is refused `CREATE`, `INSERT`,
+`UPDATE`, `DELETE` and `DROP` at the database level. Whole suite **1006 passed**, ruff clean.
+
+**The through-line: the domain lives in the contexts, not in the code.** Three components
+needed insurance knowledge — the planner and generator prompts, the observer's shape checks,
+and the arbiter's conventions. All three read it from the reviewed context files instead:
+`cautions` for the prose the models must obey, `invariants` for the facts a result can be
+checked against. A test asserts that no table or column of the corpus appears in any prompt.
+The alternative — the reference implementation's approach — leaves the same knowledge in
+several places, and the prompt is the copy nobody reviews.
+
+**Departures from the reference, and why.**
+
+- *References are matched exactly, in the database, never fuzzily.* `CLM-1089` scores above
+  0.9 against `CLM-1088` under any useful metric; a near miss there is an invented claim.
+  The original went the other way and short-circuited every numeric mention to `not_found`.
+- *The catalog cache is keyed by a generation* — the snapshot's `xmax`, which advances on any
+  committed write — replacing a module global whose docstring told you to restart the process.
+  `pg_stat_user_tables` was tried first and rejected: its counters are collected
+  asynchronously, so a refresh right after an ingest would cache exactly the stale values the
+  key exists to prevent.
+- *The embedding fallback is dropped.* It built an OpenAI client inline, and grounding that
+  varies between runs cannot be scored.
+- *A fifth observer verdict, `implausible_values`.* A result contradicting a documented fact is
+  a different problem from a malformed one; folding them together would have the refiner
+  rewrite SQL that is correct over data that is merely odd.
+- *A step's tables must be connected by declared joins.* A check the reference could not have
+  had — one table per context, no joins at all.
+- *`DOMAIN_CONVENTIONS` deleted, not rewritten.* The arbiter enforces the contexts' cautions.
+- *The inherited empty-result backstop could not fire.* It re-ran the grounding rewrite over
+  SQL that rewrite had already produced. Replaced by naming the filter value the database does
+  not hold, which turns a wasted repair budget into an honest answer.
+- *Arbitration failure is logged and named in the selection.* The original swallowed it, so a
+  system whose arbitration had stopped working looked exactly like one that never disagreed.
+
+**Not yet demonstrable, and deliberately so.** The phase's flagship acceptance —
+`query_claims_db("How many water-damage claims were filed in March 2026?")` returning evidence
+whose locator holds the executed SQL — needs the corpus from **C-8.1** and a live model. Every
+component is proven against fakes and against real Postgres; the end-to-end run belongs with
+C-8. `scripts/refresh_contexts.py` correctly fails with `Unknown table: ops.adjusters` until
+then, and the seven committed contexts are the contract C-8.1 must satisfy.
+
+**Carried forward.** `ClaimsQuerier` takes its dependencies by construction, so C-7's graph node
+injects rather than patches. `StepOutcome.selection` carries how a candidate was chosen,
+including a note when arbitration could not be reached, which C-9.3 exposes on the trace.
+
+**No lessons recorded.** No user corrections during this phase.
