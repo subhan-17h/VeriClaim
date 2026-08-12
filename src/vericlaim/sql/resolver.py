@@ -634,6 +634,42 @@ def fuzzy_rewrite_sql(sql: str, catalog: Catalog) -> str | None:
     return tree.sql(dialect="postgres") if changed else None
 
 
+def unresolvable_filters(sql: str, catalog: Catalog) -> tuple[str, ...]:
+    """Return the filter literals no catalogued value matches.
+
+    The backstop for an empty result. Zero rows because the query filtered on a value the
+    database does not hold is a different answer from zero rows because nothing matched
+    the combination of conditions, and no amount of rewriting SQL will fix the first one.
+    Naming the value lets the run stop and say so, instead of spending the repair budget
+    discovering it cannot.
+
+    Only vocabulary columns are judged. A reference column is not catalogued, and an
+    unknown claim number means there is no such claim -- which the answer must say
+    plainly, not attribute to a spelling mistake.
+    """
+    try:
+        tree = sqlglot.parse_one(sql, read="postgres")
+    except (ParseError, ValueError):
+        return ()
+    if tree is None:
+        return ()
+
+    vocabulary = catalog.vocabulary()
+    alias_map = _alias_map(tree, vocabulary)
+
+    unknown: list[str] = []
+    for target in _rewrite_targets(tree):
+        slot = _target_slot(target, alias_map, vocabulary)
+        if slot is None:
+            continue
+        table, column = slot
+        slice_catalog = StaticCatalog({table: {column: vocabulary[table][column]}})
+        for literal in target["literals"]:
+            if resolve_mention(literal, slice_catalog).status == "not_found":
+                unknown.append(literal)
+    return tuple(unknown)
+
+
 def _alias_map(
     tree: exp.Expression,
     vocabulary: Mapping[str, Mapping[str, tuple[CatalogValue, ...]]],

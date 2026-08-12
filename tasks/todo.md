@@ -120,8 +120,12 @@ confidence and cites by page; CSRS's silent zero-chunk path proven closed by tes
       documented fact is a different problem from a malformed one. The facts are declared in
       the contexts as `invariants` — sum, non_negative, ordered — so the observer knows
       nothing about insurance, and each is checked only where it is sound.)
-- [ ] **C-5.8** `sql/refiner.py` + `sql/pipeline.py` — bounded repair loop + **per-step wall-clock
+- [x] **C-5.8** `sql/refiner.py` + `sql/pipeline.py` — bounded repair loop + **per-step wall-clock
       budget**. — `A` unibot
+      (Also `sql/executor.py`. Three independent bounds stop the loop: attempts, wall clock,
+      and a repair that returns what it was asked to fix. The inherited empty-result backstop
+      could never fire — it re-ran the grounding rewrite over already-rewritten SQL — so it is
+      replaced by naming the filter value the database does not hold.)
 - [ ] **C-5.9** Candidate clustering + unit-test arbitration; `DOMAIN_CONVENTIONS` rewritten; the
       silent bare `except` removed. — `A` unibot
 - [ ] **C-5.10** `sql/tool.py` — `query_claims_db() -> list[Evidence]` carrying the executed SQL. — `N`

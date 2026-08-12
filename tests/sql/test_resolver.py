@@ -27,6 +27,7 @@ from vericlaim.sql.resolver import (
     resolve_mention,
     stored_values,
     strip_noise,
+    unresolvable_filters,
 )
 from vericlaim.sql.values_catalog import CatalogValue, ReferenceMatch, reference_key
 
@@ -59,6 +60,10 @@ def vocabulary(**columns: tuple[str, ...]) -> FakeCatalog:
 
 
 PERILS = vocabulary(peril=("water_damage", "fire", "storm"))
+
+
+def fuzzy_unresolvable(sql: str) -> tuple[str, ...]:
+    return unresolvable_filters(sql, PERILS)
 
 
 # ------------------------------------------------------------------ normalization
@@ -368,3 +373,51 @@ def test_only_grounded_mentions_become_stored_values() -> None:
 
 def test_a_question_with_nothing_to_ground_offers_nothing() -> None:
     assert stored_values(None) == []
+
+
+# ------------------------------------------------------------------ empty results
+
+
+def test_a_filter_on_a_value_the_database_lacks_explains_an_empty_result() -> None:
+    """Zero rows because the filter names something that does not exist is a different
+    answer from zero rows because nothing matched, and refining SQL cannot fix it."""
+    unknown = fuzzy_unresolvable(
+        "SELECT count(*) FROM ops.claims WHERE peril = 'meteor strike'"
+    )
+
+    assert unknown == ("meteor strike",)
+
+
+def test_a_filter_on_a_value_the_database_holds_explains_nothing() -> None:
+    assert (
+        fuzzy_unresolvable("SELECT count(*) FROM ops.claims WHERE peril = 'water damage'")
+        == ()
+    )
+
+
+def test_a_column_with_no_catalogued_values_is_not_judged() -> None:
+    """Nothing is known about it, so nothing can be said about a filter on it."""
+    assert (
+        fuzzy_unresolvable("SELECT count(*) FROM ops.claims WHERE status = 'nonsense'")
+        == ()
+    )
+
+
+def test_a_reference_filter_is_never_explained_away_as_a_typo() -> None:
+    """A claim number is exact. An unknown one means no such claim, which the answer must
+    say plainly rather than blame on spelling."""
+    catalog = FakeCatalog(
+        values={"ops.claims": {"peril": (CatalogValue("fire"),)}},
+        references=(ReferenceMatch("ops.claims", "claim_number", "CLM-1088"),),
+    )
+
+    assert (
+        unresolvable_filters(
+            "SELECT * FROM ops.claims WHERE claim_number = 'CLM-9999'", catalog
+        )
+        == ()
+    )
+
+
+def test_sql_that_does_not_parse_explains_nothing() -> None:
+    assert fuzzy_unresolvable("not sql (((") == ()
