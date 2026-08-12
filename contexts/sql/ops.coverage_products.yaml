@@ -59,3 +59,10 @@ cautions:
   - >-
     Whether a particular loss is covered is decided by the wording in policy_document,
     not by anything in this table. Nothing here is a coverage determination.
+invariants:
+  - kind: non_negative
+    column: base_deductible_pkr
+    meaning: A product's default deductible cannot be negative.
+  - kind: non_negative
+    column: coverage_limit_pkr
+    meaning: A product's coverage ceiling cannot be negative.

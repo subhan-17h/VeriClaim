@@ -332,3 +332,112 @@ def test_the_cautions_reach_the_planner_intact(context_dir) -> None:
     claims = load_contexts(context_dir)["ops.claims"]
 
     assert context_detail(claims)["cautions"] == ["Incurred is not paid."]
+
+
+# ------------------------------------------------------------------ invariants
+
+
+INVARIANT_YAML = """
+schema: ops
+table: money
+purpose: One row per settlement.
+columns:
+  - name: total_pkr
+    type: numeric
+    meaning: The whole.
+  - name: part_a_pkr
+    type: numeric
+    meaning: One part.
+  - name: part_b_pkr
+    type: numeric
+    meaning: The other part.
+  - name: opened_on
+    type: date
+    meaning: When it began.
+  - name: closed_on
+    type: date
+    meaning: When it ended.
+invariants:
+  - kind: sum
+    total: total_pkr
+    parts: [part_a_pkr, part_b_pkr]
+    meaning: The whole is the sum of its parts.
+  - kind: non_negative
+    column: part_a_pkr
+    meaning: A part cannot be negative.
+  - kind: ordered
+    lower: opened_on
+    upper: closed_on
+    meaning: Nothing closes before it opens.
+"""
+
+
+def loaded(tmp_path: Path, body: str = INVARIANT_YAML):
+    write(tmp_path, "ops.money.yaml", body)
+    return load_contexts(tmp_path)["ops.money"]
+
+
+def test_a_declared_sum_names_its_total_and_its_parts(tmp_path: Path) -> None:
+    """These are the facts the reviewed cautions state in prose, in a form the observer
+    can check a result against."""
+    invariant = loaded(tmp_path).invariants[0]
+
+    assert invariant.kind == "sum"
+    assert invariant.total == "total_pkr"
+    assert invariant.parts == ("part_a_pkr", "part_b_pkr")
+
+
+def test_a_declared_floor_names_its_column(tmp_path: Path) -> None:
+    invariant = loaded(tmp_path).invariants[1]
+
+    assert invariant.kind == "non_negative"
+    assert invariant.column == "part_a_pkr"
+
+
+def test_a_declared_ordering_names_both_sides(tmp_path: Path) -> None:
+    invariant = loaded(tmp_path).invariants[2]
+
+    assert invariant.kind == "ordered"
+    assert (invariant.lower, invariant.upper) == ("opened_on", "closed_on")
+
+
+def test_every_invariant_carries_the_reason_it_holds(tmp_path: Path) -> None:
+    """The meaning is what an observation reports; a violation with no explanation is a
+    number a reader cannot act on."""
+    assert all(invariant.meaning for invariant in loaded(tmp_path).invariants)
+
+
+def test_an_invariant_over_an_undocumented_column_is_an_error(tmp_path: Path) -> None:
+    body = INVARIANT_YAML.replace("column: part_a_pkr", "column: profit_pkr")
+
+    with pytest.raises(ContextError, match="profit_pkr"):
+        loaded(tmp_path, body)
+
+
+def test_an_invariant_of_an_unknown_kind_is_an_error(tmp_path: Path) -> None:
+    body = INVARIANT_YAML.replace("kind: non_negative", "kind: vibes")
+
+    with pytest.raises(ContextError, match="vibes"):
+        loaded(tmp_path, body)
+
+
+def test_a_sum_needs_at_least_two_parts(tmp_path: Path) -> None:
+    """A one-part sum is an equality between two columns, which `ordered` already says
+    better and which no reviewer would have meant."""
+    body = INVARIANT_YAML.replace("parts: [part_a_pkr, part_b_pkr]", "parts: [part_a_pkr]")
+
+    with pytest.raises(ContextError, match="parts"):
+        loaded(tmp_path, body)
+
+
+def test_a_context_declaring_nothing_has_no_invariants(context_dir) -> None:
+    assert load_contexts(context_dir)["ops.claims"].invariants == ()
+
+
+def test_invariants_stay_out_of_the_prompt_views(tmp_path: Path) -> None:
+    """The cautions already state them in prose, which instructs a model better than a
+    machine form does; carrying both would spend prompt space saying it twice."""
+    context = loaded(tmp_path)
+
+    assert "invariants" not in context_summary(context)
+    assert "invariants" not in context_detail(context)

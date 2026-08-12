@@ -115,7 +115,11 @@ confidence and cites by page; CSRS's silent zero-chunk path proven closed by tes
       contexts' `cautions`, which the prompts make binding, so the knowledge has one home.
       A step's tables must be connected by declared joins — a check the reference could not
       have had, with one table per context and no joins at all.)
-- [ ] **C-5.7** `sql/observer.py` — deterministic verdicts + insurance shape checks. — `A` unibot
+- [x] **C-5.7** `sql/observer.py` — deterministic verdicts + insurance shape checks. — `A` unibot
+      (Four inherited verdicts plus a fifth, `implausible_values`: a result contradicting a
+      documented fact is a different problem from a malformed one. The facts are declared in
+      the contexts as `invariants` — sum, non_negative, ordered — so the observer knows
+      nothing about insurance, and each is checked only where it is sound.)
 - [ ] **C-5.8** `sql/refiner.py` + `sql/pipeline.py` — bounded repair loop + **per-step wall-clock
       budget**. — `A` unibot
 - [ ] **C-5.9** Candidate clustering + unit-test arbitration; `DOMAIN_CONVENTIONS` rewritten; the

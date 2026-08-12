@@ -143,3 +143,37 @@ cautions:
   - >-
     An inner join to adjusters drops claims with no adjuster assigned. Use a left join
     unless the question is specifically about assigned claims.
+invariants:
+  - kind: sum
+    total: incurred_amount_pkr
+    parts: [paid_amount_pkr, reserve_amount_pkr]
+    meaning: >-
+      Incurred is paid plus reserve. A total that does not add up almost always means the
+      three columns were aggregated over different sets of rows, which a join can do
+      invisibly.
+  - kind: ordered
+    lower: paid_amount_pkr
+    upper: incurred_amount_pkr
+    meaning: Cash already paid can never exceed the expected ultimate cost.
+  - kind: non_negative
+    column: incurred_amount_pkr
+    meaning: An estimate of ultimate cost cannot be negative.
+  - kind: non_negative
+    column: paid_amount_pkr
+    meaning: >-
+      Cash paid out on a claim cannot be negative. Money received back is a recovery, and
+      is recorded in ops.claim_payments rather than here.
+  - kind: non_negative
+    column: reserve_amount_pkr
+    meaning: A reserve is money still set aside to be paid; it cannot be negative.
+  - kind: non_negative
+    column: deductible_applied_pkr
+    meaning: A deductible reduces what the insurer pays; it is never a credit.
+  - kind: ordered
+    lower: date_of_loss
+    upper: report_date
+    meaning: A loss cannot be reported before it happened.
+  - kind: ordered
+    lower: report_date
+    upper: closed_date
+    meaning: A claim cannot be closed before it was reported.

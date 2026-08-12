@@ -197,3 +197,54 @@ def test_an_undocumented_table_cannot_be_queried(contexts) -> None:
 
     assert not result.ok
     assert "Table is not allowed" in result.reason
+
+
+# ------------------------------------------------------------------ invariants
+
+
+def test_the_money_columns_of_a_claim_reconcile_by_declaration(contexts) -> None:
+    """The prose caution says incurred is paid plus reserve. This is the same fact in the
+    form the observer can hold a result against."""
+    sums = [
+        invariant
+        for invariant in contexts["ops.claims"].invariants
+        if invariant.kind == "sum"
+    ]
+
+    assert [(sums[0].total, sums[0].parts)] == [
+        ("incurred_amount_pkr", ("paid_amount_pkr", "reserve_amount_pkr"))
+    ]
+
+
+def test_a_reserve_is_declared_to_have_a_floor(contexts) -> None:
+    floors = {
+        invariant.column
+        for invariant in contexts["ops.claims"].invariants
+        if invariant.kind == "non_negative"
+    }
+
+    assert "reserve_amount_pkr" in floors
+
+
+def test_the_two_dates_are_declared_in_order(contexts) -> None:
+    """A loss reported before it happened means the query swapped the two columns the
+    contexts spend most of their words distinguishing."""
+    orderings = {
+        (invariant.lower, invariant.upper)
+        for invariant in contexts["ops.claims"].invariants
+        if invariant.kind == "ordered"
+    }
+
+    assert ("date_of_loss", "report_date") in orderings
+
+
+def test_a_negative_payment_is_never_declared_impossible(contexts) -> None:
+    """Recoveries are stored as negative amounts, so a floor here would reject the
+    corpus. The declarations have to describe the data, not tidy it."""
+    floors = {
+        invariant.column
+        for invariant in contexts["ops.claim_payments"].invariants
+        if invariant.kind == "non_negative"
+    }
+
+    assert "amount_pkr" not in floors

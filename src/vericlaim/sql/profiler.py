@@ -28,7 +28,10 @@ from psycopg import sql
 from vericlaim.sql.contexts import (
     ColumnStats,
     ContextError,
+    Invariant,
+    NonNegativeInvariant,
     SchemaContext,
+    SumInvariant,
     load_contexts,
 )
 from vericlaim.sql.db import Database
@@ -212,7 +215,26 @@ def dump_context(context: SchemaContext) -> str:
         ]
     if context.cautions:
         body["cautions"] = list(context.cautions)
+    if context.invariants:
+        # Carried across explicitly. A refresh that dropped them would disarm the
+        # observer on the day the corpus was regenerated -- exactly when a result is
+        # most likely to be wrong -- and nothing would say so.
+        body["invariants"] = [_dump_invariant(entry) for entry in context.invariants]
     return yaml.safe_dump(body, sort_keys=False, allow_unicode=True, width=96)
+
+
+def _dump_invariant(invariant: Invariant) -> dict[str, Any]:
+    entry: dict[str, Any] = {"kind": invariant.kind}
+    if isinstance(invariant, SumInvariant):
+        entry["total"] = invariant.total
+        entry["parts"] = list(invariant.parts)
+    elif isinstance(invariant, NonNegativeInvariant):
+        entry["column"] = invariant.column
+    else:
+        entry["lower"] = invariant.lower
+        entry["upper"] = invariant.upper
+    entry["meaning"] = invariant.meaning
+    return entry
 
 
 def _dump_column(column) -> dict[str, Any]:

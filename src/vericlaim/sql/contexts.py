@@ -97,6 +97,50 @@ class Join:
 
 
 @dataclass(frozen=True, slots=True)
+class SumInvariant:
+    """A total that is the sum of its parts."""
+
+    total: str
+    parts: tuple[str, ...]
+    meaning: str
+    kind: str = "sum"
+
+    @property
+    def columns(self) -> tuple[str, ...]:
+        return (self.total, *self.parts)
+
+
+@dataclass(frozen=True, slots=True)
+class NonNegativeInvariant:
+    """A quantity that cannot go below zero."""
+
+    column: str
+    meaning: str
+    kind: str = "non_negative"
+
+    @property
+    def columns(self) -> tuple[str, ...]:
+        return (self.column,)
+
+
+@dataclass(frozen=True, slots=True)
+class OrderedInvariant:
+    """Two comparable columns whose order is fixed -- dates or amounts alike."""
+
+    lower: str
+    upper: str
+    meaning: str
+    kind: str = "ordered"
+
+    @property
+    def columns(self) -> tuple[str, ...]:
+        return (self.lower, self.upper)
+
+
+Invariant = SumInvariant | NonNegativeInvariant | OrderedInvariant
+
+
+@dataclass(frozen=True, slots=True)
 class SchemaContext:
     schema: str
     table: str
@@ -108,6 +152,10 @@ class SchemaContext:
     # The distinctions that make a query wrong in a way that still returns a number:
     # incurred vs paid, deductible vs limit, date of loss vs report date.
     cautions: tuple[str, ...] = ()
+    # The subset of those cautions that can be checked against a result rather than
+    # merely read. Declared here, beside the prose that states them, so the observer
+    # stays free of any knowledge of this particular schema.
+    invariants: tuple[Invariant, ...] = ()
 
     @property
     def qualified(self) -> str:
@@ -189,7 +237,57 @@ def _parse(path: Path) -> SchemaContext:
         synonyms=synonyms,
         joins=joins,
         cautions=tuple(str(item) for item in raw.get("cautions") or ()),
+        invariants=tuple(
+            _parse_invariant(entry, where, names) for entry in raw.get("invariants") or ()
+        ),
     )
+
+
+def _parse_invariant(entry: Any, where: str, columns: set[str]) -> Invariant:
+    if not isinstance(entry, Mapping):
+        raise ContextError(f"{where}: each invariant must be a mapping")
+    kind = entry.get("kind")
+    meaning = entry.get("meaning")
+    if not isinstance(meaning, str) or not meaning.strip():
+        # An unexplained violation is a number a reader cannot act on, so the reason is
+        # required rather than optional.
+        raise ContextError(f"{where}: invariant {kind!r} needs a 'meaning'")
+
+    if kind == "sum":
+        parts = entry.get("parts")
+        if not isinstance(parts, list) or len(parts) < 2:
+            raise ContextError(
+                f"{where}: a sum invariant needs at least two 'parts'; one part is an "
+                "equality between two columns, which 'ordered' states better"
+            )
+        invariant: Invariant = SumInvariant(
+            total=str(entry.get("total")),
+            parts=tuple(str(part) for part in parts),
+            meaning=meaning.strip(),
+        )
+    elif kind == "non_negative":
+        invariant = NonNegativeInvariant(
+            column=str(entry.get("column")), meaning=meaning.strip()
+        )
+    elif kind == "ordered":
+        invariant = OrderedInvariant(
+            lower=str(entry.get("lower")),
+            upper=str(entry.get("upper")),
+            meaning=meaning.strip(),
+        )
+    else:
+        raise ContextError(
+            f"{where}: unknown invariant kind {kind!r}. "
+            "Known: sum, non_negative, ordered"
+        )
+
+    unknown = sorted(set(invariant.columns) - columns)
+    if unknown:
+        raise ContextError(
+            f"{where}: invariant {kind!r} names undocumented column(s): "
+            f"{', '.join(unknown)}"
+        )
+    return invariant
 
 
 def _require_str(raw: Mapping[str, Any], key: str, path: Path) -> str:

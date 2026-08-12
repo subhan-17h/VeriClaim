@@ -50,6 +50,10 @@ useful_for:
   - Counting probes.
 cautions:
   - Incurred is not paid.
+invariants:
+  - kind: non_negative
+    column: incurred_amount_pkr
+    meaning: An estimated ultimate cost cannot be negative.
 """
 
 
@@ -306,3 +310,16 @@ def test_a_context_file_refreshes_against_the_real_database(probe_table, tmp_pat
     assert peril.meaning.startswith("Cause of loss")
     assert peril.value_set == ("fire", "water_damage")
     assert peril.stats.null_count == 1
+
+
+def test_a_refresh_carries_the_declared_invariants_across(tmp_path, observed) -> None:
+    """A refresh that dropped them would disarm the observer, silently, on the day the
+    corpus was regenerated -- exactly when a wrong result is most likely."""
+    path = tmp_path / "ops.profiler_probe.yaml"
+    path.write_text(textwrap.dedent(CONTEXT_YAML).lstrip(), encoding="utf-8")
+
+    refresh_context_file(path, lambda schema, table: observed)
+
+    invariants = load_contexts(tmp_path)["ops.profiler_probe"].invariants
+    assert [invariant.kind for invariant in invariants] == ["non_negative"]
+    assert invariants[0].column == "incurred_amount_pkr"

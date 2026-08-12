@@ -90,3 +90,17 @@ cautions:
   - >-
     Cover is a period, not a flag. A policy is in force for a given date when that date
     is between inception_date and expiry_date, regardless of status today.
+invariants:
+  - kind: ordered
+    lower: inception_date
+    upper: expiry_date
+    meaning: Cover cannot expire before it began.
+  - kind: non_negative
+    column: sum_insured_pkr
+    meaning: A ceiling on what is payable cannot be negative.
+  - kind: non_negative
+    column: deductible_pkr
+    meaning: The amount the insured bears cannot be negative.
+  - kind: non_negative
+    column: annual_premium_pkr
+    meaning: Premium is income received; it cannot be negative.
