@@ -185,7 +185,7 @@ them: prompts name no part of the corpus, and the corpus is PKR while the code i
 - [x] **C-7.11** Record both as engineering invariants — `CLAUDE.md`, design non-negotiables 9 and
       10 with their rationale, and the two carve-outs the rule must name honestly: the vision
       transcription prompt and `Evidence.label`. — `N`
-- [ ] **C-7.12** Guard the three prompts the rule covers but no test did: `escalation.py`'s
+- [x] **C-7.12** Guard the three prompts the rule covers but no test did: `escalation.py`'s
       transcription prompt and `unit_tester.py`'s two. — `N`
 - [ ] **C-7.13** Prove the currency-agnosticism claim the invariant makes. — `N`
 

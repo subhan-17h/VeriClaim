@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from vericlaim.scanned.escalation import (
     escalate_low_confidence_pages,
     render_page_png,
 )
+from vericlaim.sql.contexts import load_contexts
 
 SCANS = Path(__file__).parents[1] / "fixtures" / "scanned"
 
@@ -255,6 +257,62 @@ def test_the_prompt_forbids_inference() -> None:
     assert "verbatim" in lowered
     assert "do not complete partial words" in lowered
     assert "do not supply content you expect" in lowered
+
+
+CONTEXT_DIRS = ("contexts/sql", "contexts/sheets")
+
+# Two corpus identifiers are also ordinary English words, and this prompt uses them as
+# English: the table `claims`, in "evidence in a claims decision", and the column `notes`,
+# in "describe the gap in notes" -- which is the name of the schema field this prompt
+# exists to fill. Declaring the two keeps the assertion exact rather than approximate: any
+# other identifier appearing here is a genuine leak, and the qualified-name test below
+# still covers `ops.claims`. Rewording the prompt to dodge them would be the wrong way
+# round -- it would change an OCR instruction to satisfy a test.
+ENGLISH_WORD_COLLISIONS = frozenset({"claims", "notes"})
+
+
+def _corpus_identifiers() -> set[str]:
+    identifiers: set[str] = set()
+    for directory in CONTEXT_DIRS:
+        for context in load_contexts(directory).values():
+            identifiers.add(context.table)
+            identifiers.update(context.column_names)
+    return identifiers
+
+
+def test_the_transcription_prompt_names_no_table_or_column_of_the_corpus() -> None:
+    """This prompt is the named exception to the domain-free rule, and this is its edge.
+
+    It may say what kind of document it is reading: it transcribes, it decides nothing,
+    and a transcriber that knows the document kind resolves ambiguous characters better.
+    It may not carry the corpus's shape. A schema name here would be schema knowledge
+    maintained somewhere other than the reviewed contexts, which is the whole of the rule.
+    """
+    from vericlaim.scanned.escalation import _PROMPT
+
+    named = sorted(
+        identifier
+        for identifier in _corpus_identifiers() - ENGLISH_WORD_COLLISIONS
+        if re.search(rf"\b{re.escape(identifier)}\b", _PROMPT, re.I)
+    )
+
+    assert named == []
+
+
+def test_the_transcription_prompt_names_no_qualified_table() -> None:
+    """`claims` is allow-listed above as an English word. `ops.claims` never is: nobody
+    writes a schema-qualified name by accident, so one here is knowledge that leaked."""
+    from vericlaim.scanned.escalation import _PROMPT
+
+    lowered = _PROMPT.lower()
+    named = sorted(
+        qualified
+        for directory in CONTEXT_DIRS
+        for qualified in load_contexts(directory)
+        if qualified.lower() in lowered
+    )
+
+    assert named == []
 
 
 # ------------------------------------------------------------ degrading honestly
