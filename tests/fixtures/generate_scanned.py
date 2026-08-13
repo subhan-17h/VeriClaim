@@ -23,126 +23,18 @@ handle differently:
 
 from __future__ import annotations
 
-import io
 import random
 from pathlib import Path
 
-import pypdfium2 as pdfium
-from PIL import Image, ImageDraw, ImageFilter
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
+from vericlaim.corpus.pdf import degrade, obscure, rasterise, render_image_only_pdf, render_text_pdf
 
 OUTPUT_DIR = Path(__file__).parent / "scanned"
 
 # Fixed so a regenerated fixture is byte-comparable and a test failure means a code
-# change, never a different random draw.
+# change, never a different random draw. The PDF timestamp is pinned by
+# render_image_only_pdf's default, so regenerating changes bytes only when the
+# rendering does.
 SEED = 42
-
-_LEFT = 20 * mm
-_TOP = 268 * mm
-_LINE = 6.0 * mm
-_WRAP = 72
-
-
-def _wrap(text: str, width: int = _WRAP) -> list[str]:
-    words, lines, current = text.split(), [], ""
-    for word in words:
-        candidate = f"{current} {word}".strip()
-        if len(candidate) <= width:
-            current = candidate
-        else:
-            lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return lines
-
-
-def _text_pdf(blocks: list[str]) -> bytes:
-    """Render the source document as an ordinary text PDF, before rasterisation."""
-    buffer = io.BytesIO()
-    pdf = canvas.Canvas(buffer, pagesize=A4)
-    y = _TOP
-    for block in blocks:
-        bold = block.isupper()
-        pdf.setFont("Helvetica-Bold" if bold else "Helvetica", 12 if bold else 11)
-        for line in _wrap(block):
-            pdf.drawString(_LEFT, y, line)
-            y -= _LINE
-        y -= _LINE * 0.5
-    pdf.showPage()
-    pdf.save()
-    return buffer.getvalue()
-
-
-def _rasterise(pdf_bytes: bytes, dpi: int) -> list[Image.Image]:
-    """Render each page to a bitmap, discarding the text layer entirely."""
-    document = pdfium.PdfDocument(pdf_bytes)
-    scale = dpi / 72.0
-    return [page.render(scale=scale).to_pil().convert("L") for page in document]
-
-
-def _degrade(
-    image: Image.Image,
-    *,
-    rotation: float,
-    noise: int,
-    blur: float,
-    jpeg_quality: int,
-    downscale: float,
-    rng: random.Random,
-) -> Image.Image:
-    """Apply the artefacts a real desk scanner introduces.
-
-    Skew, sensor noise, soft focus, JPEG ringing, and a lower effective resolution --
-    together these are what pull OCR confidence down, which is what the escalation
-    path exists to respond to.
-    """
-    if rotation:
-        image = image.rotate(rotation, resample=Image.BICUBIC, fillcolor=255, expand=False)
-    if downscale != 1.0:
-        reduced = (int(image.width * downscale), int(image.height * downscale))
-        image = image.resize(reduced, Image.BILINEAR).resize(image.size, Image.BILINEAR)
-    if blur:
-        image = image.filter(ImageFilter.GaussianBlur(blur))
-    if noise:
-        pixels = image.load()
-        for _ in range(noise * image.width * image.height // 1000):
-            x = rng.randrange(image.width)
-            y = rng.randrange(image.height)
-            pixels[x, y] = rng.choice((0, 255))
-    if jpeg_quality < 100:
-        buffer = io.BytesIO()
-        image.convert("L").save(buffer, format="JPEG", quality=jpeg_quality)
-        image = Image.open(io.BytesIO(buffer.getvalue())).convert("L")
-    return image
-
-
-def _obscure(image: Image.Image, rng: random.Random) -> Image.Image:
-    """Smear most of a page past the point of legibility.
-
-    Models a page ruined in handling -- the case where a confident transcription would
-    be a fabrication and the only honest output is that we could not read it.
-    """
-    image = image.filter(ImageFilter.GaussianBlur(4.2))
-    draw = ImageDraw.Draw(image)
-    for _ in range(160):
-        x0 = rng.randrange(image.width)
-        y0 = rng.randrange(int(image.height * 0.15), int(image.height * 0.9))
-        draw.line(
-            [(x0, y0), (x0 + rng.randrange(-260, 260), y0 + rng.randrange(-40, 40))],
-            fill=rng.randrange(70, 190),
-            width=rng.randrange(5, 16),
-        )
-    return image
-
-
-def _image_only_pdf(images: list[Image.Image], path: Path) -> None:
-    """Write bitmaps as a PDF containing images and no text objects."""
-    first, *rest = [image.convert("RGB") for image in images]
-    first.save(path, format="PDF", save_all=bool(rest), append_images=rest, resolution=110.0)
-
 
 CLM_1001 = [
     "NORTHSTAR INSURANCE LIMITED",
@@ -206,7 +98,7 @@ def main() -> None:
 
     # Clean scan: rasterised at a good resolution with only mild scanner artefacts.
     clean = [
-        _degrade(
+        degrade(
             image,
             rotation=0.3,
             noise=1,
@@ -215,13 +107,13 @@ def main() -> None:
             downscale=1.0,
             rng=rng,
         )
-        for image in _rasterise(_text_pdf(CLM_1001), dpi=200)
+        for image in rasterise(render_text_pdf(CLM_1001), dpi=200)
     ]
-    _image_only_pdf(clean, OUTPUT_DIR / "CLM-1001_INSPECTION.pdf")
+    render_image_only_pdf(clean, OUTPUT_DIR / "CLM-1001_INSPECTION.pdf")
 
     # Degraded scan: readable, but poorly enough to pull confidence down.
     degraded = [
-        _degrade(
+        degrade(
             image,
             rotation=1.4,
             noise=14,
@@ -230,13 +122,13 @@ def main() -> None:
             downscale=0.55,
             rng=rng,
         )
-        for image in _rasterise(_text_pdf(CLM_1002), dpi=150)
+        for image in rasterise(render_text_pdf(CLM_1002), dpi=150)
     ]
-    _image_only_pdf(degraded, OUTPUT_DIR / "CLM-1002_INSPECTION.pdf")
+    render_image_only_pdf(degraded, OUTPUT_DIR / "CLM-1002_INSPECTION.pdf")
 
     # Ruined scan: the honest output is that we could not read it.
-    illegible = [_obscure(image, rng) for image in _rasterise(_text_pdf(CLM_1003), dpi=150)]
-    _image_only_pdf(illegible, OUTPUT_DIR / "CLM-1003_INSPECTION.pdf")
+    illegible = [obscure(image, rng) for image in rasterise(render_text_pdf(CLM_1003), dpi=150)]
+    render_image_only_pdf(illegible, OUTPUT_DIR / "CLM-1003_INSPECTION.pdf")
 
     for path in sorted(OUTPUT_DIR.glob("*.pdf")):
         relative = path.relative_to(Path(__file__).parents[2])
