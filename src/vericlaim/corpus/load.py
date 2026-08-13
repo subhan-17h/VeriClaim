@@ -13,9 +13,27 @@ from psycopg import sql
 
 from vericlaim.config import PROJECT_ROOT, Settings, get_settings
 from vericlaim.corpus.catalog import ADJUSTERS, COVERAGE_PRODUCTS, REGIONS
-from vericlaim.corpus.transactions import generate_transactions
+from vericlaim.corpus.transactions import TransactionRows, generate_transactions
 
 SCHEMA_PATH = PROJECT_ROOT / "scripts" / "schema.sql"
+
+
+def ops_tables(transactions: TransactionRows) -> tuple[tuple[str, Sequence[Any]], ...]:
+    """Every ``ops`` table and its rows, in the order foreign keys require.
+
+    Shared with the corpus validator, which checks the declared invariants against
+    these rows before they are loaded. The load order is also the dependency order:
+    a table is listed after everything it references.
+    """
+    return (
+        ("regions", REGIONS),
+        ("coverage_products", COVERAGE_PRODUCTS),
+        ("adjusters", ADJUSTERS),
+        ("customers", transactions.customers),
+        ("policies", transactions.policies),
+        ("claims", transactions.claims),
+        ("claim_payments", transactions.claim_payments),
+    )
 
 
 def _copy_rows(cursor: psycopg.Cursor, table: str, rows: Sequence[Any]) -> None:
@@ -39,16 +57,7 @@ def load_ops_corpus(
 ) -> dict[str, int]:
     """Recreate ``ops`` and load every corpus table through the admin role."""
     settings = settings or get_settings()
-    transactions = generate_transactions(seed)
-    tables = (
-        ("regions", REGIONS),
-        ("coverage_products", COVERAGE_PRODUCTS),
-        ("adjusters", ADJUSTERS),
-        ("customers", transactions.customers),
-        ("policies", transactions.policies),
-        ("claims", transactions.claims),
-        ("claim_payments", transactions.claim_payments),
-    )
+    tables = ops_tables(generate_transactions(seed))
 
     ddl = Path(schema_path).read_text(encoding="utf-8")
     with psycopg.connect(settings.dsn(readonly=False)) as conn:

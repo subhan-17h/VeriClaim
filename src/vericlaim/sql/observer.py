@@ -210,18 +210,29 @@ def _invariant_violations(
         if context is None:
             continue
         for invariant in context.invariants:
-            violated = _check(invariant, sources, result.rows)
+            violated = check_invariant(invariant, sources, result.rows)
             if violated is not None:
                 violations.append(violated)
     return tuple(violations)
 
 
-def _check(
+def check_invariant(
     invariant: Invariant,
     sources: Mapping[tuple[str, str], int],
     rows: Sequence[Sequence[Any]],
 ) -> str | None:
-    """Return a description of the first row that violates ``invariant``, or None."""
+    """Return a description of the first row that violates ``invariant``, or None.
+
+    Public because the corpus validator judges the *generated* rows by exactly this
+    rule before they are ever loaded. Two implementations of "incurred is paid plus
+    reserve" would eventually disagree, and the way that surfaces is a corpus the
+    validator passes and the observer then flags on every query over it.
+
+    ``sources`` maps ``(function, column)`` -- in that order, and with the column
+    lowercased -- to the position that column occupies in ``rows``. A caller holding
+    plain stored rows rather than a query result uses ``""`` for the function, which
+    every invariant kind accepts as a bare column.
+    """
     if isinstance(invariant, SumInvariant):
         return _check_sum(invariant, sources, rows)
     if isinstance(invariant, NonNegativeInvariant):
