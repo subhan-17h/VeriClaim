@@ -118,3 +118,27 @@ every key read as absent and every provider reported "not set".
 process environment once at import — `load_dotenv(..., override=False)` so a genuine
 environment variable still wins. Verify with a check that prints key *presence*, never the
 value.
+
+---
+
+## LESSON-9 — What `.env` gives the process, it gives `pytest`
+
+**Pattern:** The direct counterpart of LESSON-8, and caused by its fix. `config.py` calls
+`load_dotenv()` at import so the provider adapters and the tracing wrapper can read
+credentials from `os.environ` rather than from a settings object that gets logged.
+`tests/conftest.py` imports `vericlaim.config`, so every test process
+inherited the developer's real `LANGSMITH_TRACING=true` and a real key. The offline suite
+— the one whose whole point is that it needs no credentials — had been tracing against the
+live API for an entire phase. LangSmith eventually answered `monthly unique traces usage
+limit exceeded`: `pytest` had spent the allowance the evaluation suite was budgeted inside.
+
+It surfaced as an unrelated symptom. One tracing test failed only in a full run and passed
+alone, because an earlier test had built a span against the real `langsmith` and a cache
+keyed on nothing kept serving it. The order-dependence was the visible bug; the live
+credentials were the real one.
+
+**Rule:** Every credential or flag LESSON-8 puts into `os.environ` reaches the test suite,
+so each one needs an autouse fixture clearing it, beside `isolated_quota_state`, which
+already exists for exactly this reason. Treat a test that behaves differently in a full run than
+alone as evidence of shared process state, and find the state before fixing the test —
+the isolation failure is usually the smaller half of what is wrong.

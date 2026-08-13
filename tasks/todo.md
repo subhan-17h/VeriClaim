@@ -539,3 +539,78 @@ side by side on one sheet would be read as one, which the corpus does not do and
 docstring records.
 
 **No lessons recorded.** No user corrections during this phase.
+
+### Phase C-7 — closed
+
+**Delivered.** One question goes in and the system decides which of the four sources it
+needs, asks only those, makes one body of evidence out of what they returned, judges
+whether that is enough, writes an answer from the evidence and from nothing else, and
+checks the answer before returning it. Ten tasks: validated state, understanding,
+source routing, per-source planning, the LangGraph fan-out, collection, the bounded
+sufficiency loop, synthesis, verification, and the tracing that makes all of it
+inspectable afterwards.
+
+**Evidence.** `uv run pytest tests/orchestrator -q` → **226 passed**. Whole offline suite
+`-m "not ocr and not docling and not ollama"` → **1332 passed, 18 deselected**, repeated
+under randomized ordering. ruff clean. Reference repos match the LESSON-3 baseline.
+
+**The invariant this phase exists to protect.** Synthesis sees `render_for_synthesis()`
+and nothing else, so no raw tool output can reach the answer. Around that sit the two
+guards that make a wrong answer loud rather than plausible: an unresolvable `[En]` fails
+the run, and a source that could not be reached is recorded as a gap the answer must
+own rather than a silence it can paper over.
+
+**Departures from the reference, and why.**
+
+- *Every prompt is domain-free and source-free.* No corpus table, column, or source name
+  appears in any node's prompt — the knowledge lives in the reviewed context files, and
+  each node's tests assert the prompt stays clean. A prompt that names `ops.claims` is a
+  routing table maintained in two places, and the second copy is the one nobody updates.
+  This continues the C-5/C-6 decision, still unratified.
+- *The query-type vocabulary is `lookup | aggregate | explanation | assessment`.* The
+  reference offers retrieval and analytics, which is the right split for a system with
+  one source and the wrong one for a question that needs a policy clause read against a
+  count.
+- *Failure is not uniform.* A provider failure degrades — the stage records it and the run
+  continues from the raw question. `BudgetExceededError`, `PaidFallbackBlockedError` and
+  `QuotaExhaustedError` propagate as terminal, because retrying past a spend ceiling is
+  the one failure that gets more expensive the harder you try.
+- *A contradictory router reply resolves to the refusal.* Asked to both refuse and route,
+  the router is taken at its most conservative word and the dropped sources are named on
+  the stage. An unusable reply fails the stage and leaves routing unmade rather than
+  guessing a source set.
+- *Declining is first-class and requires a reason.* A routed source left unasked is an
+  error, and so is a sub-goal for a source that was never routed.
+- *Nodes stay plain state-to-state functions.* `_update()` translates each into channel
+  updates, so a node is callable from a test, from the API, or from the graph with no
+  framework in the signature. Graph node names carry a `source.` prefix — `:` is reserved
+  by LangGraph.
+- *Counted gaps short-circuit the sufficiency model call entirely.* If a planned sub-goal
+  returned nothing, that is arithmetic, and paying a model to agree with arithmetic is
+  waste. The replan bound is applied where the verdict is written, not where the edge is
+  followed, so the loop cannot be re-entered by a second writer.
+- *Four refusal paths are answered deterministically with no model call.* Out of scope,
+  needing clarification, unanswerable, and no evidence are decisions already made by the
+  time synthesis runs.
+- *A failed verification regenerates once and is re-checked from the start*, and if that
+  fails the answer is replaced by an honest degradation rather than hedged in place. A
+  hedge leaves the unsupported sentence in the answer with a qualifier in front of it.
+- *One question is one trace.* Our span steps aside when LangGraph is already providing
+  one, so the run tree holds one span per node instead of two.
+
+**Lesson recorded.** LESSON-9 — `.env` loaded into `os.environ` at import means the test
+suite inherits live credentials. Found by proving C-7.10: the offline suite had been
+tracing against the real LangSmith API, which answered `monthly unique traces usage limit
+exceeded`. The month's trace allowance was spent by `pytest`.
+
+**Not yet demonstrable, and deliberately so.** The phase's flagship acceptance — an
+all-four question returning one cited answer whose every marker resolves — needs the
+corpus from **C-8** and a live model. The graph is proven end to end against fakes;
+`build_graph` takes every node and every tool as an injectable, so wiring the real four
+is construction, not surgery. No `orchestrator/tools.py` registry exists yet; building it
+belongs with C-8 when there is a corpus for the tools to read.
+
+**Carried forward.** `run_question` is the single entry point C-9.2 serves over HTTP, and
+the stage records it accumulates are already the shape C-9.1's `stage_start/update/end`
+events need. `_trace_stage` attaches per-stage model, cost and latency, which is what
+C-10.6's metadata panel reads.
