@@ -61,14 +61,23 @@ tiers:
     max_output_tokens: 2048
 
   # Structured generation where correctness matters but the task is well-scoped.
+  #
+  # flash-lite, not flash, and the reason is measured rather than assumed. A four-source
+  # question was observed making 18 model calls, of which the mid tasks -- sql_generator
+  # above all, at 9 calls in one question -- are the bulk. With mid and strong both on
+  # flash, every one of those calls competed for a single 10/min pool and the question
+  # failed part-way through on a per-minute limit, while flash-lite's larger allowance
+  # sat almost unused. flash-lite was already this tier's declared fallback, so it was
+  # already serving these tasks under load; this makes the common case the primary one
+  # and leaves flash for the tier that plans and synthesizes.
   mid:
     provider: gemini
-    model: gemini-3.5-flash
-    usd_per_1m_input: 0.0      # free tier (paid rate would be ~0.30)
-    usd_per_1m_output: 0.0     # free tier (paid rate would be ~2.50)
+    model: gemini-3.5-flash-lite
+    usd_per_1m_input: 0.0      # free tier (paid rate would be ~0.10)
+    usd_per_1m_output: 0.0     # free tier (paid rate would be ~0.40)
     paid: false
-    rpm: 10
-    rpd: 250
+    rpm: 15
+    rpd: 1000
     timeout_s: 90
     max_output_tokens: 4096
 
@@ -134,9 +143,11 @@ fallback:
        paid: false, rpm: 10, rpd: 250, max_output_tokens: 4096}
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
        paid: true, max_output_tokens: 2048}
+  # The pair is inverted along with the tier above: flash is now mid's fallback, so a
+  # flash-lite minute-limit still has somewhere free to go before the paid rung.
   mid:
-    - {provider: gemini, model: gemini-3.5-flash-lite, usd_per_1m_input: 0.0, usd_per_1m_output: 0.0,
-       paid: false, rpm: 15, rpd: 1000, max_output_tokens: 4096}
+    - {provider: gemini, model: gemini-3.5-flash, usd_per_1m_input: 0.0, usd_per_1m_output: 0.0,
+       paid: false, rpm: 10, rpd: 250, max_output_tokens: 4096}
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
        paid: true, max_output_tokens: 4096}
   strong:

@@ -85,8 +85,10 @@
     - the cause, circumstances or observations described on received paperwork
     - a figure, date or reference written on a received document
     - whether the paperwork on a case says what other sources imply it should
+    - what the paperwork across the cases of a period records as their causes, where the
+      question is why something happened rather than how often it did
   cannot_answer:
-    - totals, counts or trends across many cases
+    - a count, total or rate: it can show what documents record, never compute how many
     - what the insurer's own issued documents state
     - anything an analyst compiled for periodic review
     - anything on a page too degraded to be read, which is reported rather than guessed

@@ -209,7 +209,15 @@ class Settings(BaseSettings):
     enforce_rate_limits: bool = True
     quota_state_path: Path = PROJECT_ROOT / ".vericlaim_cache" / "quota.json"
     # Longest we will wait for an RPM slot before giving up on a model.
-    max_rate_limit_wait_s: float = 20.0
+    #
+    # Set from measurement. A four-source question was observed making 18 model calls in
+    # about ten seconds, against a primary tier allowing 10 per minute, so the sliding
+    # window has to roll once mid-question. The previous 20s could not span that: the
+    # wait was abandoned, the ladder fell through to a paid rung it is forbidden to use,
+    # and the question failed outright. Waiting a minute is the correct response to a
+    # per-minute limit -- the limit is pacing, not exhaustion, which is why the daily
+    # counter raises instead of waiting.
+    max_rate_limit_wait_s: float = 65.0
 
     # --- Orchestration ----------------------------------------------------
     max_replans: int = 2
