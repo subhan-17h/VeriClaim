@@ -1,7 +1,7 @@
 # VeriClaim — Design
 
 **Date:** 2026-08-10
-**Status:** Approved
+**Status:** Approved 2026-08-10. Non-negotiables 9–10 ratified 2026-08-13.
 
 ## Problem
 
@@ -29,6 +29,8 @@ origin, and in which the system prefers an honest limitation over a fabrication.
 6. Genuine cross-source questions (two-, three-, and four-source)
 7. Decision-support language — never "claim approved"; refuse or qualify when evidence is thin
 8. Generalizes — no hard-coded scenario logic, no benchmark answers in prompts
+9. Domain-free prompts — no corpus table, column, or source name in any prompt that routes, plans, generates SQL, or synthesizes; that knowledge lives only in reviewed context files
+10. One locale — PKR throughout, declared as context metadata, never branched on in code
 
 ## Architecture
 
@@ -160,6 +162,55 @@ the UI, and the evaluation report.
 
 Deterministic — no LLM involved — are: SQL validation, entity resolution, result-shape observation,
 citation resolution, spreadsheet cell lookup, evidence assembly, and routing *verification*.
+
+### Domain knowledge lives in the reviewed context files, not in the prompts
+
+*Ratified 2026-08-13, having governed the code since C-5.*
+
+Twelve prompts route, plan, write SQL, arbitrate between candidates, judge sufficiency, synthesize,
+and verify. None of them names a table, a column, or a source. Every one of those names lives in
+`contexts/sql/*.yaml`, `contexts/sheets/*.yaml`, and `contexts/sources.yaml`, and reaches the model
+as JSON in the user message.
+
+The reason is not tidiness. A prompt naming `ops.claims` is a schema maintained in two places, and
+the copy inside a prompt is the one nobody re-reads when the schema changes. In a reviewed file the
+claim is diffable, a fifth source is a file rather than a code change, and a new column is covered
+by the guard tests the moment it is written.
+
+Each prompt carries a test that collects every table and column from the real context files and
+asserts none appears, so a new table is covered without anyone remembering to extend a list. The
+orchestrator's prompts carry a second test asserting no source name appears — choosing sources is
+the router's job, made from `contexts/sources.yaml` and nothing else.
+
+**Two things are outside this rule, by name.**
+
+- The vision *transcription* prompt in `src/vericlaim/scanned/escalation.py` says it is reading a
+  scanned insurance document. That is deliberate: a transcriber that knows what kind of page it is
+  looking at resolves ambiguous characters better. It routes nothing, plans nothing, writes no
+  query, and has no schema to leak. It is still held to the table-and-column half of the rule by
+  its own test.
+- `Evidence.label` — "Claims database", "Policy document" — reaches the model in every evidence
+  block. That is provenance, not instruction. Evidence that does not say where it came from cannot
+  be cited, and being citable is the whole value of the answer.
+
+### Locale — one currency, regions below the city
+
+*Ratified 2026-08-13.*
+
+The corpus is Pakistani rupees throughout, and the policy wordings are written in them. The code is
+not: coercion strips any currency mark, and the unit is declared once per column as `unit: PKR`
+beside a `*_pkr` name, with tests asserting the two never disagree. Nothing in the logic asks which
+currency a figure is in, so a second currency would be context-file work rather than a code change.
+
+Geography is three levels and one join. A region is a district below a city — `region_name` is
+"Lahore Central" — with `city` in {Lahore, Karachi, Islamabad} and a `province` above it. Claims
+carry `region_id` into `ops.regions` and no city of their own; the spreadsheets carry `region_name`
+as a bare label and join on the string. This is the model `contexts/sql/ops.regions.yaml` already
+commits to, and it is what C-8's generator must produce.
+
+PROJECT.md uses PKR and those cities only as example flavour, in a document written throughout in
+advisory language. Neither was mandated. Both are chosen here so that the corpus, the contexts and
+the worked examples in the brief agree.
 
 ## Safety and grounding
 

@@ -20,6 +20,13 @@ because it arrives with no visible defect. Three things guard against that:
 Escalation never aborts indexing. A missing key, an exhausted quota, or a blocked
 paid rung leaves the original OCR text in place, flagged low-confidence, which is a
 worse answer than escalating but a truthful one.
+
+This prompt is the one named exception to the project's domain-free rule. It says it is
+reading a scanned insurance document, and that is deliberate: a transcriber that knows
+what kind of page it is looking at resolves ambiguous characters better. It routes
+nothing, plans nothing and writes no query, so it has no schema to leak and no decision
+to prejudge. It is still held to the rest of the rule -- a test asserts it names no
+table and no column of the corpus.
 """
 
 from __future__ import annotations

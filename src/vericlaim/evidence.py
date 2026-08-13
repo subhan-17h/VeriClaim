@@ -29,7 +29,9 @@ type SourceType = Literal["policy", "sql", "spreadsheet", "scanned_pdf"]
 
 SOURCE_TYPES: tuple[SourceType, ...] = ("policy", "sql", "spreadsheet", "scanned_pdf")
 
-#: Human labels for the four sources, used in prompts and the UI.
+#: Human labels for the four sources. These reach the model inside every evidence block,
+#: and are the one place a source name is allowed to: evidence that cannot say where it
+#: came from cannot be cited. Provenance, never instruction.
 SOURCE_LABELS: dict[SourceType, str] = {
     "policy": "Policy document",
     "sql": "Claims database",

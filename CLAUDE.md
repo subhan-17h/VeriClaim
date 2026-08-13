@@ -128,6 +128,16 @@ These are the properties that make the system trustworthy. Breaking one is a bug
   *consistent with* coverage, with final determination resting with the claims team.
 - **Never edit an evaluation golden to make a run pass.** Goldens are append-only. Root-cause the
   failure and make a general fix.
+- **No prompt names the corpus.** No table, column, or source name appears in any prompt that routes,
+  plans, generates SQL, arbitrates between candidates, or synthesizes. That knowledge lives in
+  `contexts/` and reaches the model as data in the user message. A prompt naming `ops.claims` is a
+  schema maintained in two places, and the copy inside a prompt is the one nobody re-reads. Two
+  things sit outside this rule by name: the vision *transcription* prompt in `scanned/escalation.py`,
+  which routes nothing and has no schema to leak, and `Evidence.label`, which is provenance rather
+  than instruction — evidence that cannot say where it came from cannot be cited.
+- **The corpus is PKR; the code is currency-agnostic.** The unit is declared as context metadata —
+  `unit: PKR` on every `*_pkr` column — and never branched on. Parsing strips any currency mark;
+  nothing in the logic asks which currency a figure was written in.
 - **No hard-coded example behaviour.** No March-specific logic, no expected SQL, no benchmark answers
   in prompts, no routing by question-string matching. Tests verify the architecture; they must not
   define a brittle implementation.

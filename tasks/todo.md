@@ -176,6 +176,22 @@ contains the value in the source `.xlsx`.
 **Acceptance:** all-four question returns one cited answer with every marker resolving; policy-only
 invokes exactly one tool; out-of-scope refuses with zero tool calls.
 
+### Ratification addendum (2026-08-13)
+
+Two decisions were taken in practice across C-5, C-6 and C-7 and never written where they bind —
+they lived only in closed review sections. Ratified now, before C-8 generates a corpus against
+them: prompts name no part of the corpus, and the corpus is PKR while the code is not.
+
+- [x] **C-7.11** Record both as engineering invariants — `CLAUDE.md`, design non-negotiables 9 and
+      10 with their rationale, and the two carve-outs the rule must name honestly: the vision
+      transcription prompt and `Evidence.label`. — `N`
+- [ ] **C-7.12** Guard the three prompts the rule covers but no test did: `escalation.py`'s
+      transcription prompt and `unit_tester.py`'s two. — `N`
+- [ ] **C-7.13** Prove the currency-agnosticism claim the invariant makes. — `N`
+
+**Acceptance:** every prompt constant in `src/` has a test asserting it names no corpus table or
+column; the coercion reads the same amount whatever marks its currency; offline suite green.
+
 ## Phase C-8 — Synthetic corpus
 
 - [ ] **C-8.1** `ops` schema + ~12k claims Jan–Jun 2026 with real FKs and indexes. — `N`
@@ -566,7 +582,8 @@ own rather than a silence it can paper over.
   appears in any node's prompt — the knowledge lives in the reviewed context files, and
   each node's tests assert the prompt stays clean. A prompt that names `ops.claims` is a
   routing table maintained in two places, and the second copy is the one nobody updates.
-  This continues the C-5/C-6 decision, still unratified.
+  This continued the C-5/C-6 decision, unratified when this section was written; ratified
+  2026-08-13 as design non-negotiables 9 and 10. See the ratification addendum above.
 - *The query-type vocabulary is `lookup | aggregate | explanation | assessment`.* The
   reference offers retrieval and analytics, which is the right split for a system with
   one source and the wrong one for a question that needs a policy clause read against a
