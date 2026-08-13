@@ -631,3 +631,58 @@ belongs with C-8 when there is a corpus for the tools to read.
 the stage records it accumulates are already the shape C-9.1's `stage_start/update/end`
 events need. `_trace_stage` attaches per-stage model, cost and latency, which is what
 C-10.6's metadata panel reads.
+
+### Ratification addendum — closed (C-7.11, C-7.12, C-7.13)
+
+**Why.** Both decisions had been made and enforced by tests for three phases, and were
+written down only in review sections describing what a closed phase had done. A rule
+recorded where it is described rather than where it binds is a rule the next phase can
+contradict without anyone noticing — and C-8, which generates a corpus against both, is
+the phase that would have.
+
+**Delivered.** Design non-negotiables 9 and 10, dated against the 2026-08-10 approval,
+with the rationale for each; two `CLAUDE.md` invariants; and guards on the three prompts
+that had none.
+
+**The rule is stated with its exceptions, which is the only way it is true.**
+`Evidence.label` puts "Claims database" in front of the model in every evidence block, and
+must: evidence that cannot say where it came from cannot be cited. The vision prompt names
+the document kind because a transcriber reads better for knowing it, and it decides
+nothing. Stating the rule without those two would have made it a claim the code already
+broke — and the comment on `SOURCE_LABELS` said in as many words that those labels were
+"used in prompts", which would have contradicted the new invariant three files away.
+
+**Found while ratifying.** The rule covers twelve prompt constants, not the ten that were
+guarded. `sql/unit_tester.py` holds two — the assertions that discriminate between
+disagreeing SQL candidates, and the grading of candidates against them — with no test file
+at all. Both already complied; neither was proven to. And the generic guard fails on the
+vision prompt over two corpus identifiers that are also ordinary English words: the table
+`claims` and the column `notes`, the latter being the schema field that prompt exists to
+fill. The test declares those two and holds the prompt to every other identifier, plus a
+second test on schema-qualified names with no allow-list. Rewording the prompt would have
+been the wrong way round.
+
+**Departures from what was planned.**
+
+- *Geography stayed out of `CLAUDE.md`.* Regions being sub-city districts is corpus shape,
+  not a property that makes the system trustworthy. Breaking it is a corpus bug, and C-8
+  could legitimately revisit it with the user. It is recorded in the design doc instead.
+- *No new dated decision record under `docs/superpowers/specs/`.* A second file would make
+  "where is this written" a two-place question, inside the ratification of a rule about
+  knowledge having one home. The approved non-negotiable 8 was left exactly as it was —
+  "no hard-coded scenario logic" is a different constraint, and rewriting it would erase
+  what was approved on 2026-08-10.
+- *Nothing in `tasks/lessons.md`.* Every LESSON there is a defect pattern and the rule that
+  prevents it. Nothing was corrected here: the decisions were right, consistently applied,
+  and enforced by twenty tests. They were simply unwritten.
+
+**Evidence.** Offline suite **1348 passed, 18 deselected** — 1332 before, plus two guards
+on the transcription prompt, four on the arbiter's two prompts, and ten currency spellings.
+ruff clean. No executable line changed in `src/`; the only source edits are a docstring and
+a comment.
+
+**Carried forward.** `sheets/profiler.py`'s `CURRENCY_FORMAT_RE` omits `inr`, which
+`coercion.py`'s `CURRENCY_RE` includes, so a cell formatted `#,##0 "INR"` is stripped by one
+and not classified as currency by the other. Harmless on a PKR corpus and left alone rather
+than folded into a no-behaviour-change task, but it is a second definition of the same list
+and belongs in one place.
