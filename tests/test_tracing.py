@@ -13,6 +13,7 @@ import pytest
 
 from vericlaim.tracing import (
     add_run_metadata,
+    is_framework_tracing_enabled,
     is_tracing_enabled,
     trace_completion,
     traced,
@@ -24,6 +25,26 @@ def tracing_off(monkeypatch):
     monkeypatch.delenv("LANGSMITH_TRACING", raising=False)
     monkeypatch.delenv("VC_LANGSMITH_TRACING", raising=False)
     monkeypatch.delenv("LANGSMITH_API_KEY", raising=False)
+
+
+class TestTheSuiteItselfNeverTraces:
+    """A guard on the test environment, not on the code under test.
+
+    ``vericlaim.config`` loads ``.env`` into the process environment at import, because
+    the provider adapters and the tracing wrapper read credentials straight from
+    ``os.environ`` rather than from a settings object that gets logged. A developer with
+    LangSmith configured therefore runs the whole offline suite with tracing live: every
+    graph test posts a real run tree, and the free plan's 5,000 traces a month -- the
+    budget the evaluation suite has to fit inside -- is spent by ``pytest``.
+
+    These two assertions are cheap and they fail loudly the moment that is true again.
+    """
+
+    def test_our_tracing_is_off_by_default_under_pytest(self):
+        assert is_tracing_enabled() is False
+
+    def test_the_frameworks_tracing_is_off_by_default_under_pytest(self):
+        assert is_framework_tracing_enabled() is False
 
 
 class TestEnablement:
@@ -187,6 +208,51 @@ class TestTracedWhenEnabled:
 
         with pytest.raises(ValueError, match="still mine"):
             fail()
+
+    def test_the_span_comes_from_the_langsmith_imported_now(
+        self, monkeypatch, tracing_off
+    ):
+        """The built wrapper is cached, and it closes over the module that built it.
+
+        Build the span once, swap the module, call again: the second call must be
+        spanned by the second module. A cache with a single slot cannot do that -- it
+        keeps serving a span from a langsmith that is no longer imported, so one earlier
+        call anywhere in the process silently takes every later one off a stub and onto
+        the network.
+        """
+        import sys
+
+        monkeypatch.setenv("LANGSMITH_TRACING", "true")
+        monkeypatch.setenv("LANGSMITH_API_KEY", "k")
+
+        def recorder(into: list[str]):
+            def traceable(**kwargs):
+                def decorate(fn):
+                    @functools.wraps(fn)
+                    def inner(*args, **kw):
+                        into.append(str(kwargs.get("name")))
+                        return fn(*args, **kw)
+
+                    return inner
+
+                return decorate
+
+            return type("M", (), {"traceable": staticmethod(traceable)})
+
+        first: list[str] = []
+        second: list[str] = []
+
+        @traced("understand")
+        def node():
+            return None
+
+        monkeypatch.setitem(sys.modules, "langsmith", recorder(first))
+        node()
+        monkeypatch.setitem(sys.modules, "langsmith", recorder(second))
+        node()
+
+        assert first == ["understand"]
+        assert second == ["understand"]
 
 
 class TestRunMetadata:

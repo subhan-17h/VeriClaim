@@ -99,6 +99,32 @@ def routing() -> ModelRouting:
 
 
 @pytest.fixture(autouse=True)
+def no_live_tracing(monkeypatch):
+    """Keep the suite off LangSmith.
+
+    ``vericlaim.config`` loads ``.env`` into the process environment at import, so that
+    the provider adapters and the tracing wrapper can read credentials from
+    ``os.environ`` instead of from a settings object that gets logged. The side effect
+    is that a developer with LangSmith configured runs the entire offline suite with
+    tracing live: every graph test posts a real run tree, and the free plan's 5,000
+    traces a month -- the budget the whole evaluation suite has to fit inside -- goes on
+    ``pytest`` instead.
+
+    Same hazard as :func:`isolated_quota_state` below, same remedy: the suite gets an
+    empty view of the credentials. Tests that are *about* tracing set these themselves,
+    and monkeypatch restores the empty state after each one.
+    """
+    for name in (
+        "LANGSMITH_TRACING",
+        "LANGCHAIN_TRACING_V2",
+        "VC_LANGSMITH_TRACING",
+        "LANGSMITH_API_KEY",
+        "LANGCHAIN_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def isolated_quota_state(tmp_path, monkeypatch):
     """Keep every test's quota counters in its own temp file.
 

@@ -46,6 +46,12 @@ from vericlaim.orchestrator.nodes.understand import understand as understand_nod
 from vericlaim.orchestrator.nodes.verify import verify as verify_node
 from vericlaim.orchestrator.sources import SourceCapability, load_capabilities
 from vericlaim.orchestrator.state import GraphState, StageRecord
+from vericlaim.tracing import (
+    add_run_metadata,
+    is_framework_tracing_enabled,
+    traced,
+    without_own_span,
+)
 
 # Source branches share the state's stage list with the orchestration nodes, so their
 # records carry a prefix. Without it a source named like a node would be indistinguishable
@@ -132,12 +138,39 @@ def build_graph(
     return graph.compile()
 
 
+@traced("vericlaim.question", run_type="chain", tags=["orchestrator"])
 def run_question(graph: Any, question: str, **config: Any) -> GraphState:
-    """Run one question through a compiled graph and return the finished state."""
+    """Run one question through a compiled graph and return the finished state.
+
+    One question is one trace. The root span is opened here rather than around the graph
+    invocation inside it, so the run tree covers the whole question -- including the
+    validation that rejects a blank one before any model is reached.
+    """
     # Constructed rather than passed as a dict so a blank question fails here, before a
     # model is called, with the same error every other entry point gives.
     start = GraphState(question=question)
-    return GraphState(**graph.invoke(start, **config))
+    state = GraphState(**graph.invoke(start, **config))
+    _trace_run(state)
+    return state
+
+
+def _trace_run(state: GraphState) -> None:
+    """Summarize the finished run on the root span.
+
+    What a reader of the trace wants first: which sources were consulted, what it cost,
+    whether the answer was checked, and whether the graph went round again.
+    """
+    add_run_metadata(
+        vc_sources_routed=list(state.routing.sources) if state.routing else [],
+        vc_sources_used=list(state.sources_used),
+        vc_evidence=len(state.evidence.items),
+        vc_replans=state.replans,
+        vc_verified=bool(state.citations.get("verified")),
+        vc_degraded=bool(state.citations.get("degraded")),
+        vc_failures=list(state.failures),
+        vc_cost_usd=round(state.total_cost_usd, 6),
+        vc_latency_ms=round(state.total_latency_ms, 2),
+    )
 
 
 def _replan(state: GraphState) -> str:
@@ -158,7 +191,9 @@ def _plan_graph_node(plan: Node) -> Callable[[GraphState], dict[str, Any]]:
 
     def run(state: GraphState) -> dict[str, Any]:
         hint = str(state.sufficiency.get("retry_hint", ""))
-        return _update(state, plan(state, retry_hint=hint))
+        after = _spanned_once(plan)(state, retry_hint=hint)
+        _trace_stage(state, after)
+        return _update(state, after)
 
     return run
 
@@ -198,9 +233,42 @@ def _as_graph_node(node: Node) -> Callable[[GraphState], dict[str, Any]]:
     """Adapt a plain state-to-state node into the update the framework applies."""
 
     def run(state: GraphState) -> dict[str, Any]:
-        return _update(state, node(state))
+        after = _spanned_once(node)(state)
+        _trace_stage(state, after)
+        return _update(state, after)
 
     return run
+
+
+def _spanned_once(node: Node) -> Node:
+    """The node, traced exactly once.
+
+    Every node carries its own ``@traced`` so it is traced when called directly -- from
+    the API, from a test, from the plain-Python subsystem. Inside the graph, LangGraph
+    already opens a span for the node it is running, and leaving ours on would put two
+    identically named spans in the run tree, one inside the other, for every node of
+    every question. On a plan whose trace allowance the whole evaluation suite has to fit
+    inside, that is a budget question as much as a legibility one.
+    """
+    return without_own_span(node) if is_framework_tracing_enabled() else node
+
+
+def _trace_stage(before: GraphState, after: GraphState) -> None:
+    """Attach what the node just did to whichever span is covering it."""
+    added = after.stages[len(before.stages) :]
+    if added:
+        _trace_stage_record(added[-1])
+
+
+def _trace_stage_record(stage: StageRecord) -> None:
+    add_run_metadata(
+        vc_stage=stage.name,
+        vc_stage_model=stage.model,
+        vc_stage_cost_usd=round(stage.cost_usd, 6),
+        vc_stage_latency_ms=round(stage.latency_ms, 2),
+        vc_stage_error=stage.error,
+        **{f"vc_{key}": value for key, value in stage.detail.items()},
+    )
 
 
 def _source_node(
@@ -210,6 +278,16 @@ def _source_node(
     stage_name = _node_name(source)
 
     def run(state: GraphState) -> dict[str, Any]:
+        # A branch builds its channel update directly rather than returning a state, so
+        # it cannot go through _trace_stage. It belongs on the trace all the same: which
+        # sub-goal a source was handed, how much evidence came back, and why none did
+        # are the first things a reader of the trace looks for.
+        update = ask(state)
+        for stage in update.get("stages", ()):
+            _trace_stage_record(stage)
+        return update
+
+    def ask(state: GraphState) -> dict[str, Any]:
         goal = str((state.plans.get("sub_goals") or {}).get(source, {}).get("goal", ""))
         tool = tools.get(source)
         if tool is None:

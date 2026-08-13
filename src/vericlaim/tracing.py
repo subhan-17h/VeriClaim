@@ -68,21 +68,28 @@ def traced(
 
     def decorator(func: F) -> F:
         span_name = name or func.__name__
-        # Built once on first traced call, then reused. Importing langsmith and
-        # constructing the wrapper is not free, and most runs never trace.
-        cache: dict[str, Callable[..., Any]] = {}
+        # Built on first traced call, then reused: constructing the wrapper is not free
+        # and most runs never trace at all.
+        #
+        # Keyed on the module that built it, not merely "built once". The wrapper closes
+        # over the ``traceable`` that made it, so a single-slot cache goes on serving a
+        # span from a langsmith that is no longer the imported one -- and whichever
+        # module happened to be there for the first traced call in the process wins for
+        # the rest of it. That is invisible in production, where the module never
+        # changes, and it silently defeats every attempt to substitute one.
+        cache: dict[Any, Callable[..., Any]] = {}
 
         def _traceable() -> Callable[..., Any]:
-            if "fn" not in cache:
-                from langsmith import traceable
+            import langsmith
 
-                cache["fn"] = traceable(
+            if langsmith not in cache:
+                cache[langsmith] = langsmith.traceable(
                     run_type=run_type,
                     name=span_name,
                     metadata=metadata or {},
                     tags=tags or [],
                 )(func)
-            return cache["fn"]
+            return cache[langsmith]
 
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -147,6 +154,46 @@ def trace_completion(completion: Any) -> bool:
     return add_run_metadata(**fields)
 
 
+def is_framework_tracing_enabled() -> bool:
+    """Whether LangChain/LangGraph will emit its own run for every node it executes.
+
+    The graph is instrumented twice over by default: LangGraph traces each node it runs,
+    and our own ``@traced`` decorator wraps the same functions so they are traced when
+    called directly -- from the API, from a test, from the plain-Python NL2SQL path. With
+    both active the run tree carries two spans per node, one nested inside the other with
+    the same name, and a question that should cost one trace costs ten.
+
+    That matters beyond tidiness: the free LangSmith plan allows 5,000 traces a month,
+    and the whole evaluation suite has to fit inside it.
+
+    So the two are told apart here. LangChain reads its own environment variables; when
+    those are set it will provide the span, and :func:`without_own_span` steps aside.
+    When only ``VC_LANGSMITH_TRACING`` is set the framework stays quiet and our span is
+    the only one there is.
+    """
+    flag = os.environ.get(
+        "LANGSMITH_TRACING", os.environ.get("LANGCHAIN_TRACING_V2", "")
+    )
+    if flag.strip().lower() not in {"1", "true", "yes", "on"}:
+        return False
+    return bool(os.environ.get("LANGSMITH_API_KEY", "").strip())
+
+
+def without_own_span(fn: Any) -> Any:
+    """Return ``fn`` with our tracing layer removed, if it has one.
+
+    Used where something else is already spanning the call. Partials are rebuilt around
+    the unwrapped function so injected dependencies survive; anything undecorated is
+    returned unchanged.
+    """
+    if isinstance(fn, functools.partial):
+        inner = without_own_span(fn.func)
+        if inner is fn.func:
+            return fn
+        return functools.partial(inner, *fn.args, **fn.keywords)
+    return getattr(fn, "__wrapped__", fn)
+
+
 def configure_tracing(*, project: str | None = None) -> bool:
     """Point tracing at a project. Returns whether tracing is active afterwards."""
     if project:
@@ -157,7 +204,9 @@ def configure_tracing(*, project: str | None = None) -> bool:
 __all__ = [
     "add_run_metadata",
     "configure_tracing",
+    "is_framework_tracing_enabled",
     "is_tracing_enabled",
     "trace_completion",
     "traced",
+    "without_own_span",
 ]
