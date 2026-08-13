@@ -202,6 +202,29 @@ column; the coercion reads the same amount whatever marks its currency; offline 
 
 **Acceptance:** `generate_corpus.py --seed 42` is reproducible; consistency validator passes.
 
+### Scope addendum (2026-08-13)
+
+The board's five cards stop at generated files. Verified while planning: that leaves the system
+still unable to answer a question. `build_graph` takes its tools injected and only fakes have ever
+been passed, and the three ingest functions are called only from tests. Two cards are appended so
+the phase ends with the corpus loaded and the flagship question answered live — which is also the
+acceptance C-5 and C-7 have both been carrying as "not yet demonstrable". A third records a
+blocking defect found while verifying C-8.1. Existing numbers are unchanged, per the C-1.7 and
+C-7.11 precedent.
+
+- [ ] **C-8.6** The loader — walk `data/` through the existing `index_corpus`,
+      `index_scanned_corpus` and `ingest_workbook`. No new indexing logic, and two distinct
+      manifest paths so the second pass cannot delete the first's chunks. — `V` CSRS
+- [ ] **C-8.7** `orchestrator/tools.py` — the registry handing the four real tools to
+      `build_graph`, sharing one embedder, `ChunkStore` and `Database` across them. No
+      module-level globals. Plus `scripts/ask.py`, the repo's first CLI entry point. — `N`
+- [x] **C-8.8** Stop the offline suite billing the real spend ledger. Taken out of order because
+      it blocked verification of every other card. — `N`
+
+**Acceptance (appended):** the all-four question returns one cited answer with every `[En]`
+resolving, a policy-only question invokes exactly one tool, and an out-of-scope question refuses
+with zero tool calls.
+
 ## Phase C-9 — API + streaming
 
 - [ ] **C-9.1** `api/protocol.py` — NDJSON event schema. — `V` both repos

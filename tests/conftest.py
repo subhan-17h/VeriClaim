@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 
-from vericlaim.config import ModelRouting, ModelSpec
+from vericlaim.config import ModelRouting, ModelSpec, get_settings
 from vericlaim.gateway import providers as providers_mod
 from vericlaim.gateway.types import Message, RawCompletion, Usage
 from vericlaim.policy.embeddings import DOCUMENT_PREFIX, QUERY_PREFIX
@@ -126,18 +126,32 @@ def no_live_tracing(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolated_quota_state(tmp_path, monkeypatch):
-    """Keep every test's quota counters in its own temp file.
+    """Keep every test's quota counters and spend ledger in its own temp file.
 
     Without this, running the suite would consume the real free-tier daily allowance
     recorded in .vericlaim_cache/quota.json and could refuse live calls afterwards.
+
+    Redirecting the environment variables is necessary but not sufficient.
+    ``get_settings`` is ``lru_cache``d, so whichever code resolves it first fixes the
+    state paths for the entire session, and these variables are read only at that first
+    resolution. pytest builds higher-scoped fixtures before function-scoped ones, so a
+    single module-scoped fixture reading settings anywhere in the suite pins the real
+    paths before this fixture runs -- after which ``reset_default_spend`` faithfully
+    reloads the project's own ledger and every scripted call in the suite is billed
+    against the real prepaid budget at the fictional prices the tests declare.
+
+    Dropping the cache is what makes the redirection actually take effect, and makes
+    isolation a property of the fixture rather than of collection order.
     """
     from vericlaim.gateway import quota, spend
 
     monkeypatch.setenv("VC_QUOTA_STATE_PATH", str(tmp_path / "quota.json"))
     monkeypatch.setenv("VC_SPEND_STATE_PATH", str(tmp_path / "spend.json"))
+    get_settings.cache_clear()
     quota.reset_default_limiter()
     spend.reset_default_spend()
     yield
+    get_settings.cache_clear()
     quota.reset_default_limiter()
     spend.reset_default_spend()
 

@@ -12,9 +12,9 @@ import json
 
 import pytest
 
-from vericlaim.config import ModelRouting, ModelSpec, Settings
+from vericlaim.config import ModelRouting, ModelSpec, Settings, get_settings
 from vericlaim.gateway.core import Gateway, reset_session_spend
-from vericlaim.gateway.spend import PersistentSpend
+from vericlaim.gateway.spend import PersistentSpend, default_spend
 from vericlaim.gateway.types import BudgetExceededError
 
 PRICED = ModelSpec(
@@ -46,6 +46,49 @@ def routing_priced() -> ModelRouting:
 
 def _spend(tmp_path) -> PersistentSpend:
     return PersistentSpend(path=tmp_path / "spend.json", settings=Settings())
+
+
+@pytest.fixture(scope="module")
+def settings_read_before_isolation():
+    """Resolve settings from a wider scope than the per-test isolation fixture.
+
+    pytest builds higher-scoped fixtures first, so this runs *before*
+    ``isolated_quota_state`` redirects the state paths. Any module-scoped fixture
+    anywhere in the suite does the same thing, which is what makes this a suite-wide
+    hazard rather than a quirk of one file.
+    """
+    return get_settings().spend_state_path
+
+
+class TestLedgerIsolation:
+    """The suite must never be able to write into the project's own ledger.
+
+    ``get_settings`` is cached process-wide, so whichever code resolves it first fixes
+    the state paths for the whole session. Redirecting the environment variable is not
+    enough on its own: unless the cache is dropped as well, isolation holds only while
+    no wider-scoped fixture happens to read settings first. When it does not hold, the
+    suite's scripted calls accumulate against the real prepaid budget -- priced at the
+    fictional rates declared in this file -- until the ceiling refuses live work.
+    """
+
+    def test_a_wider_scoped_settings_read_cannot_leak_the_real_ledger(
+        self, settings_read_before_isolation
+    ):
+        project_ledger = Settings.model_fields["spend_state_path"].default
+
+        assert get_settings().spend_state_path != project_ledger
+        assert default_spend().summary().total_usd == 0.0
+
+    def test_recording_leaves_the_project_ledger_untouched(
+        self, settings_read_before_isolation
+    ):
+        project_ledger = Settings.model_fields["spend_state_path"].default
+        before = project_ledger.read_bytes() if project_ledger.exists() else None
+
+        default_spend().record(model_label="alpha/alpha-main", usd=0.25, tokens=1000)
+
+        after = project_ledger.read_bytes() if project_ledger.exists() else None
+        assert after == before
 
 
 class TestRecording:
