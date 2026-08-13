@@ -2,59 +2,118 @@
 # `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
 schema: ops
 table: claim_payments
-purpose: >-
-  The individual payment transactions made on claims, one row per payment. A claim is
-  usually settled in several instalments, so this table is the transaction-level detail
-  behind ops.claims.paid_amount_pkr.
+purpose: The individual payment transactions made on claims, one row per payment. A claim is usually
+  settled in several instalments, so this table is the transaction-level detail behind ops.claims.paid_amount_pkr.
 columns:
-  - name: payment_id
-    type: bigint
-    meaning: Surrogate key.
-  - name: claim_id
-    type: bigint
-    meaning: The claim the payment was made on.
-  - name: payment_date
-    type: date
-    meaning: >-
-      The date the payment was made. Later than the claim's report_date, and unrelated to
-      when the loss occurred.
-  - name: payment_type
-    type: text
-    meaning: >-
-      What the payment was for - indemnity for the loss itself, expense for costs such as
-      adjuster fees, or recovery for money received back, which is recorded as a negative
-      amount.
-  - name: amount_pkr
-    type: numeric
-    meaning: >-
-      The amount of this single payment. Negative for recoveries, so a plain sum is the
-      net figure.
-    unit: PKR
+- name: payment_id
+  type: bigint
+  meaning: Surrogate key.
+  sample_values:
+  - '400001'
+  - '400002'
+  - '400003'
+  - '400004'
+  - '400005'
+  - '400006'
+  - '400007'
+  - '400008'
+  stats:
+    total_count: 9000
+    distinct_count: 9000
+    null_count: 0
+    minimum: '400001'
+    maximum: '409000'
+- name: claim_id
+  type: bigint
+  meaning: The claim the payment was made on.
+  sample_values:
+  - '300001'
+  - '300003'
+  - '300004'
+  - '300006'
+  - '300009'
+  - '300010'
+  - '300011'
+  - '300012'
+  stats:
+    total_count: 9000
+    distinct_count: 7200
+    null_count: 0
+    minimum: '300001'
+    maximum: '312000'
+- name: payment_date
+  type: date
+  meaning: The date the payment was made. Later than the claim's report_date, and unrelated to when
+    the loss occurred.
+  sample_values:
+  - '2026-01-02'
+  - '2026-01-03'
+  - '2026-01-04'
+  - '2026-01-05'
+  - '2026-01-06'
+  - '2026-01-07'
+  - '2026-01-08'
+  - '2026-01-09'
+  stats:
+    total_count: 9000
+    distinct_count: 237
+    null_count: 0
+    minimum: '2026-01-02'
+    maximum: '2026-08-28'
+- name: payment_type
+  type: text
+  meaning: What the payment was for - indemnity for the loss itself, expense for costs such as adjuster
+    fees, or recovery for money received back, which is recorded as a negative amount.
+  sample_values:
+  - expense
+  - indemnity
+  value_set:
+  - expense
+  - indemnity
+  stats:
+    total_count: 9000
+    distinct_count: 2
+    null_count: 0
+- name: amount_pkr
+  type: numeric
+  meaning: The amount of this single payment. Negative for recoveries, so a plain sum is the net figure.
+  unit: PKR
+  sample_values:
+  - '1000.00'
+  - '10000.00'
+  - '1000256.64'
+  - '1000856.43'
+  - '1001170.81'
+  - '1001594.36'
+  - '1001837.16'
+  - '100197.41'
+  stats:
+    total_count: 9000
+    distinct_count: 8971
+    null_count: 0
+    minimum: '319.93'
+    maximum: '7880361.84'
 useful_for:
-  - Tracing how a claim was settled over time.
-  - Splitting claim cost into indemnity and expense.
-  - Counting or summing payments made in a period.
+- Tracing how a claim was settled over time.
+- Splitting claim cost into indemnity and expense.
+- Counting or summing payments made in a period.
 synonyms:
-  - term: instalment
-    maps_to: amount_pkr
-  - term: settlement date
-    maps_to: payment_date
-  - term: fees
-    maps_to: payment_type
+- term: instalment
+  maps_to: amount_pkr
+- term: settlement date
+  maps_to: payment_date
+- term: fees
+  maps_to: payment_type
 joins:
-  - column: claim_id
-    references: ops.claims.claim_id
-    meaning: The claim being paid. Every payment belongs to exactly one claim.
+- column: claim_id
+  references: ops.claims.claim_id
+  meaning: The claim being paid. Every payment belongs to exactly one claim.
 cautions:
-  - >-
-    The sum of payments for a claim reconciles with ops.claims.paid_amount_pkr, not with
-    incurred_amount_pkr, because incurred also includes the outstanding reserve.
-  - >-
-    Recoveries are negative amounts. Filtering to positive rows overstates cost, and
-    summing absolute values overstates it further.
-  - >-
-    payment_date is when money moved. It answers nothing about when the loss occurred or
-    when the claim was reported.
-  - >-
-    A claim with no payments has no rows here. Counting claims through this table silently
-    drops every claim that has not been paid yet.
+- The sum of payments for a claim reconciles with ops.claims.paid_amount_pkr, not with incurred_amount_pkr,
+  because incurred also includes the outstanding reserve.
+- Recoveries are negative amounts. Filtering to positive rows overstates cost, and summing absolute
+  values overstates it further.
+- payment_date is when money moved. It answers nothing about when the loss occurred or when the claim
+  was reported.
+- A claim with no payments has no rows here. Counting claims through this table silently drops every
+  claim that has not been paid yet.

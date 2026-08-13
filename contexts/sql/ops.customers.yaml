@@ -2,56 +2,143 @@
 # `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
 schema: ops
 table: customers
-purpose: >-
-  The policyholders, both individuals and businesses. One row per customer. A customer
-  may hold several policies over time, so customer counts and policy counts are not
-  interchangeable.
+purpose: The policyholders, both individuals and businesses. One row per customer. A customer may
+  hold several policies over time, so customer counts and policy counts are not interchangeable.
 columns:
-  - name: customer_id
-    type: bigint
-    meaning: Surrogate key. Referenced by policies.
-  - name: customer_name
-    type: text
-    meaning: >-
-      Full name for an individual, or registered business name for a commercial
-      policyholder. Business names carry suffixes such as "Pvt Ltd" that a question will
-      usually omit.
-  - name: customer_type
-    type: text
-    meaning: Whether the policyholder is an individual or a business.
-  - name: city
-    type: text
-    meaning: City of the customer's correspondence address.
-  - name: region_id
-    type: integer
-    meaning: The region servicing this customer.
-  - name: email
-    type: text
-    meaning: Contact address. Not a reliable identity key - it may be shared or absent.
-  - name: created_at
-    type: timestamp without time zone
-    meaning: When the customer record was opened. Not the inception date of any policy.
+- name: customer_id
+  type: bigint
+  meaning: Surrogate key. Referenced by policies.
+  sample_values:
+  - '100001'
+  - '100002'
+  - '100003'
+  - '100004'
+  - '100005'
+  - '100006'
+  - '100007'
+  - '100008'
+  stats:
+    total_count: 4000
+    distinct_count: 4000
+    null_count: 0
+    minimum: '100001'
+    maximum: '104000'
+- name: customer_name
+  type: text
+  meaning: Full name for an individual, or registered business name for a commercial policyholder.
+    Business names carry suffixes such as "Pvt Ltd" that a question will usually omit.
+  sample_values:
+  - Aabpara Office Supplies Pvt Ltd
+  - Aamir Abbasi
+  - Aamir Ahmed
+  - Aamir Akhtar
+  - Aamir Ali
+  - Aamir Awan
+  - Aamir Aziz
+  - Aamir Bhatti
+  stats:
+    total_count: 4000
+    distinct_count: 2307
+    null_count: 0
+- name: customer_type
+  type: text
+  meaning: Whether the policyholder is an individual or a business.
+  sample_values:
+  - business
+  - individual
+  value_set:
+  - business
+  - individual
+  stats:
+    total_count: 4000
+    distinct_count: 2
+    null_count: 0
+- name: city
+  type: text
+  meaning: City of the customer's correspondence address.
+  sample_values:
+  - Islamabad
+  - Karachi
+  - Lahore
+  value_set:
+  - Islamabad
+  - Karachi
+  - Lahore
+  stats:
+    total_count: 4000
+    distinct_count: 3
+    null_count: 0
+- name: region_id
+  type: integer
+  meaning: The region servicing this customer.
+  sample_values:
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  - '7'
+  - '8'
+  stats:
+    total_count: 4000
+    distinct_count: 9
+    null_count: 0
+    minimum: '1'
+    maximum: '9'
+- name: email
+  type: text
+  meaning: Contact address. Not a reliable identity key - it may be shared or absent.
+  sample_values:
+  - aabpara.office.supplies.pvt.ltd.100139@example.pk
+  - aabpara.office.supplies.pvt.ltd.100505@example.pk
+  - aabpara.office.supplies.pvt.ltd.100739@example.pk
+  - aabpara.office.supplies.pvt.ltd.100838@example.pk
+  - aabpara.office.supplies.pvt.ltd.100897@example.pk
+  - aabpara.office.supplies.pvt.ltd.101325@example.pk
+  - aabpara.office.supplies.pvt.ltd.102063@example.pk
+  - aabpara.office.supplies.pvt.ltd.102242@example.pk
+  stats:
+    total_count: 4000
+    distinct_count: 3693
+    null_count: 307
+- name: created_at
+  type: timestamp without time zone
+  meaning: When the customer record was opened. Not the inception date of any policy.
+  sample_values:
+  - '2020-01-01 06:33:00'
+  - '2020-01-01 08:28:00'
+  - '2020-01-01 10:21:00'
+  - '2020-01-03 01:46:00'
+  - '2020-01-03 04:40:00'
+  - '2020-01-03 20:26:00'
+  - '2020-01-04 01:27:00'
+  - '2020-01-05 07:17:00'
+  stats:
+    total_count: 4000
+    distinct_count: 3998
+    null_count: 0
+    minimum: '2020-01-01 06:33:00'
+    maximum: '2025-09-30 21:44:00'
 useful_for:
-  - Counting policyholders, split by individual versus business.
-  - Finding the policies and claims belonging to a named customer.
-  - Grouping customers by region or city.
+- Counting policyholders, split by individual versus business.
+- Finding the policies and claims belonging to a named customer.
+- Grouping customers by region or city.
 synonyms:
-  - term: policyholder
-    maps_to: customer_name
-  - term: insured
-    maps_to: customer_name
-  - term: client
-    maps_to: customer_name
-  - term: account opened
-    maps_to: created_at
+- term: policyholder
+  maps_to: customer_name
+- term: insured
+  maps_to: customer_name
+- term: client
+  maps_to: customer_name
+- term: account opened
+  maps_to: created_at
 joins:
-  - column: region_id
-    references: ops.regions.region_id
-    meaning: The region servicing the customer. May differ from the region of a claim.
+- column: region_id
+  references: ops.regions.region_id
+  meaning: The region servicing the customer. May differ from the region of a claim.
 cautions:
-  - >-
-    created_at is when the customer relationship began, not when cover began. Questions
-    about when someone became insured are about ops.policies.inception_date.
-  - >-
-    One customer can hold many policies. Counting rows here answers "how many
-    policyholders", never "how many policies".
+- created_at is when the customer relationship began, not when cover began. Questions about when someone
+  became insured are about ops.policies.inception_date.
+- One customer can hold many policies. Counting rows here answers "how many policyholders", never
+  "how many policies".

@@ -2,49 +2,105 @@
 # `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
 schema: ops
 table: adjusters
-purpose: >-
-  The loss adjusters who handle claims, one row per adjuster. Used to attribute claims to
-  the person handling them and to compare handling across regions and seniority.
+purpose: The loss adjusters who handle claims, one row per adjuster. Used to attribute claims to the
+  person handling them and to compare handling across regions and seniority.
 columns:
-  - name: adjuster_id
-    type: integer
-    meaning: Surrogate key. Referenced by claims.
-  - name: adjuster_name
-    type: text
-    meaning: Full name of the adjuster.
-  - name: region_id
-    type: integer
-    meaning: >-
-      The region the adjuster is based in. An adjuster can be assigned claims outside
-      their base region, so this is not the region of their claims.
-  - name: seniority
-    type: text
-    meaning: Grade of the adjuster - junior, senior or lead.
-  - name: is_active
-    type: boolean
-    meaning: >-
-      Whether the adjuster is currently employed. Inactive adjusters still appear on the
-      historical claims they handled.
+- name: adjuster_id
+  type: integer
+  meaning: Surrogate key. Referenced by claims.
+  sample_values:
+  - '1'
+  - '10'
+  - '11'
+  - '12'
+  - '13'
+  - '14'
+  - '15'
+  - '16'
+  stats:
+    total_count: 24
+    distinct_count: 24
+    null_count: 0
+    minimum: '1'
+    maximum: '24'
+- name: adjuster_name
+  type: text
+  meaning: Full name of the adjuster.
+  sample_values:
+  - Ahsan Malik
+  - Ali Raza
+  - Ayesha Memon
+  - Bilal Qureshi
+  - Danish Ahmed
+  - Fahad Siddiqui
+  - Farah Nadeem
+  - Hamza Rauf
+  stats:
+    total_count: 24
+    distinct_count: 24
+    null_count: 0
+- name: region_id
+  type: integer
+  meaning: The region the adjuster is based in. An adjuster can be assigned claims outside their base
+    region, so this is not the region of their claims.
+  sample_values:
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  - '7'
+  - '8'
+  stats:
+    total_count: 24
+    distinct_count: 9
+    null_count: 0
+    minimum: '1'
+    maximum: '9'
+- name: seniority
+  type: text
+  meaning: Grade of the adjuster - junior, senior or lead.
+  sample_values:
+  - junior
+  - lead
+  - senior
+  value_set:
+  - junior
+  - lead
+  - senior
+  stats:
+    total_count: 24
+    distinct_count: 3
+    null_count: 0
+- name: is_active
+  type: boolean
+  meaning: Whether the adjuster is currently employed. Inactive adjusters still appear on the historical
+    claims they handled.
+  sample_values:
+  - 'false'
+  - 'true'
+  stats:
+    total_count: 24
+    distinct_count: 2
+    null_count: 0
 useful_for:
-  - Counting or comparing claims by the adjuster handling them.
-  - Grouping claim handling by adjuster seniority.
-  - Listing the adjusters based in a region.
+- Counting or comparing claims by the adjuster handling them.
+- Grouping claim handling by adjuster seniority.
+- Listing the adjusters based in a region.
 synonyms:
-  - term: handler
-    maps_to: adjuster_name
-  - term: assessor
-    maps_to: adjuster_name
-  - term: grade
-    maps_to: seniority
+- term: handler
+  maps_to: adjuster_name
+- term: assessor
+  maps_to: adjuster_name
+- term: grade
+  maps_to: seniority
 joins:
-  - column: region_id
-    references: ops.regions.region_id
-    meaning: The adjuster's base region.
+- column: region_id
+  references: ops.regions.region_id
+  meaning: The adjuster's base region.
 cautions:
-  - >-
-    An adjuster's base region is not the region of the claims they handled. Group claims
-    by ops.claims.region_id unless the question is specifically about where staff are
-    based.
-  - >-
-    Excluding inactive adjusters silently drops the historical claims they handled.
-    Filter on is_active only when the question is about current staffing.
+- An adjuster's base region is not the region of the claims they handled. Group claims by ops.claims.region_id
+  unless the question is specifically about where staff are based.
+- Excluding inactive adjusters silently drops the historical claims they handled. Filter on is_active
+  only when the question is about current staffing.

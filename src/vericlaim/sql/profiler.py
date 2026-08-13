@@ -105,7 +105,7 @@ def profile_table(db: Database, schema: str, table: str) -> dict[str, ColumnProf
                 for row in conn.execute(
                     sql.SQL(
                         "SELECT DISTINCT {column}::text FROM {table} "
-                        "WHERE {column} IS NOT NULL LIMIT {limit}"
+                        "WHERE {column} IS NOT NULL ORDER BY {column}::text LIMIT {limit}"
                     ).format(
                         column=column, table=qualified, limit=sql.Literal(SAMPLE_LIMIT)
                     )

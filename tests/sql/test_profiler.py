@@ -166,6 +166,24 @@ def test_refreshing_a_file_leaves_it_loadable(tmp_path, observed) -> None:
     assert "ops.profiler_probe" in load_contexts(tmp_path)
 
 
+def test_refreshing_unchanged_statistics_produces_no_diff(tmp_path, observed) -> None:
+    """The promise `dump_context` makes in its own docstring.
+
+    It only holds once a file is in canonical form, which the first refresh is what
+    brings about. After that a refresh over an unchanged corpus must be a no-op, because
+    a refresh that rewrites the file every time trains its reviewer to skip the diff --
+    and the diff is the only thing standing between a stale statistic and the planner.
+    """
+    path = tmp_path / "ops.profiler_probe.yaml"
+    path.write_text(textwrap.dedent(CONTEXT_YAML).lstrip(), encoding="utf-8")
+
+    refresh_context_file(path, lambda schema, table: observed)
+    canonical = path.read_text(encoding="utf-8")
+    refresh_context_file(path, lambda schema, table: observed)
+
+    assert path.read_text(encoding="utf-8") == canonical
+
+
 def test_a_failure_on_one_table_leaves_every_file_untouched(tmp_path, observed) -> None:
     """A refresh that stops halfway would leave the committed contexts describing two
     different databases, which is worse than describing a stale one."""
@@ -256,6 +274,18 @@ def test_a_low_cardinality_text_column_gets_its_value_set(probe_table) -> None:
     profiles = profile_table(probe_table, "ops", PROBE)
 
     assert profiles["peril"].value_set == ("fire", "water_damage")
+
+
+@pytest.mark.postgres
+def test_sample_values_come_back_in_a_stable_order(probe_table) -> None:
+    """Sampling without ORDER BY let PostgreSQL return a different eight values from an
+    unchanged corpus, so a refresh that learned nothing still produced a diff -- exactly
+    the churn that makes the reviewed half of these files stop being reviewed."""
+    first = profile_table(probe_table, "ops", PROBE)["peril"].sample_values
+
+    assert first == tuple(sorted(first))
+    for _ in range(3):
+        assert profile_table(probe_table, "ops", PROBE)["peril"].sample_values == first
 
 
 @pytest.mark.postgres

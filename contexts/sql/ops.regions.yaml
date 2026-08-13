@@ -2,39 +2,97 @@
 # `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
 schema: ops
 table: regions
-purpose: >-
-  The operating regions NorthStar writes business in. One row per region. Regions are the
-  unit almost every management question aggregates by, and the same names appear in the
-  quarterly spreadsheets, so this table is what ties the two sources together.
+purpose: The operating regions NorthStar writes business in. One row per region. Regions are the unit
+  almost every management question aggregates by, and the same names appear in the quarterly spreadsheets,
+  so this table is what ties the two sources together.
 columns:
-  - name: region_id
-    type: integer
-    meaning: Surrogate key. Referenced by policies, claims, customers and adjusters.
-  - name: region_name
-    type: text
-    meaning: >-
-      Display name of the region, for example "Lahore Central". This is the exact string
-      the quarterly spreadsheets use in their region column, so it is the join key
-      between the database and the spreadsheet source.
-  - name: city
-    type: text
-    meaning: Principal city of the region - Lahore, Karachi or Islamabad.
-  - name: province
-    type: text
-    meaning: Province the region sits in.
+- name: region_id
+  type: integer
+  meaning: Surrogate key. Referenced by policies, claims, customers and adjusters.
+  sample_values:
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  - '7'
+  - '8'
+  stats:
+    total_count: 9
+    distinct_count: 9
+    null_count: 0
+    minimum: '1'
+    maximum: '9'
+- name: region_name
+  type: text
+  meaning: Display name of the region, for example "Lahore Central". This is the exact string the
+    quarterly spreadsheets use in their region column, so it is the join key between the database
+    and the spreadsheet source.
+  sample_values:
+  - Islamabad Central
+  - Islamabad East
+  - Islamabad West
+  - Karachi Central
+  - Karachi East
+  - Karachi West
+  - Lahore Central
+  - Lahore North
+  value_set:
+  - Islamabad Central
+  - Islamabad East
+  - Islamabad West
+  - Karachi Central
+  - Karachi East
+  - Karachi West
+  - Lahore Central
+  - Lahore North
+  - Lahore South
+  stats:
+    total_count: 9
+    distinct_count: 9
+    null_count: 0
+- name: city
+  type: text
+  meaning: Principal city of the region - Lahore, Karachi or Islamabad.
+  sample_values:
+  - Islamabad
+  - Karachi
+  - Lahore
+  value_set:
+  - Islamabad
+  - Karachi
+  - Lahore
+  stats:
+    total_count: 9
+    distinct_count: 3
+    null_count: 0
+- name: province
+  type: text
+  meaning: Province the region sits in.
+  sample_values:
+  - Islamabad Capital Territory
+  - Punjab
+  - Sindh
+  value_set:
+  - Islamabad Capital Territory
+  - Punjab
+  - Sindh
+  stats:
+    total_count: 9
+    distinct_count: 3
+    null_count: 0
 useful_for:
-  - Grouping claims, policies or premium by region.
-  - Resolving a region named in a question to the region_id the other tables use.
-  - Reconciling a region named in a spreadsheet with the transactional database.
+- Grouping claims, policies or premium by region.
+- Resolving a region named in a question to the region_id the other tables use.
+- Reconciling a region named in a spreadsheet with the transactional database.
 synonyms:
-  - term: area
-    maps_to: region_name
-  - term: branch
-    maps_to: region_name
-  - term: territory
-    maps_to: region_name
+- term: area
+  maps_to: region_name
+- term: branch
+  maps_to: region_name
+- term: territory
+  maps_to: region_name
 cautions:
-  - >-
-    Region names are also used verbatim in the spreadsheet source. When a question spans
-    both, match on region_name rather than region_id, because the spreadsheets carry no
-    identifiers.
+- Region names are also used verbatim in the spreadsheet source. When a question spans both, match
+  on region_name rather than region_id, because the spreadsheets carry no identifiers.

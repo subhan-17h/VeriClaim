@@ -2,178 +2,380 @@
 # `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
 schema: ops
 table: claims
-purpose: >-
-  Every claim reported against a policy, one row per claim. This is the central table of
-  the operational database: claim volumes, perils, regional patterns and cost all come
-  from here. It carries two different dates and three different money columns, and
-  choosing the wrong one of either produces a plausible answer to a different question.
+purpose: 'Every claim reported against a policy, one row per claim. This is the central table of the
+  operational database: claim volumes, perils, regional patterns and cost all come from here. It carries
+  two different dates and three different money columns, and choosing the wrong one of either produces
+  a plausible answer to a different question.'
 columns:
-  - name: claim_id
-    type: bigint
-    meaning: Surrogate key. Referenced by claim_payments.
-  - name: claim_number
-    type: text
-    meaning: >-
-      The external claim reference, formatted CLM-1234. This is the reference printed on
-      the scanned inspection reports, plumber invoices and claim forms, so it is the join
-      between this database and the scanned document source.
-  - name: policy_id
-    type: bigint
-    meaning: The policy the claim was made against.
-  - name: adjuster_id
-    type: integer
-    meaning: The adjuster handling the claim. Null while a claim is unassigned.
-  - name: region_id
-    type: integer
-    meaning: >-
-      The region the loss occurred in. This is the region to group claims by; the
-      adjuster's base region is a different thing.
-  - name: peril
-    type: text
-    meaning: >-
-      The cause of loss as classified at first notification - for example water_damage,
-      fire, theft, storm, impact or liability. Classified from what was reported, and a
-      later investigation may contradict it.
-  - name: date_of_loss
-    type: date
-    meaning: >-
-      The date the damage actually occurred. Use this for questions about when losses
-      happened, exposure periods, and whether the loss fell inside the period of cover.
-  - name: report_date
-    type: date
-    meaning: >-
-      The date the claim was notified to NorthStar. Use this for questions about claim
-      volume, workload and reporting trends. Always on or after date_of_loss.
-  - name: closed_date
-    type: date
-    meaning: The date the claim was closed. Null while the claim is open.
-  - name: status
-    type: text
-    meaning: >-
-      Workflow state of the claim file - open, closed, reopened, denied or withdrawn. An
-      administrative state recorded by the claims team, not a coverage decision this
-      system may assert or infer.
-  - name: cause_description
-    type: text
-    meaning: >-
-      Free-text description of the loss as recorded at notification, for example "escape
-      of water from a burst pipe under the kitchen sink". Useful for distinguishing a
-      sudden event from gradual damage, but it is a summary written by staff, not
-      evidence in itself.
-  - name: incurred_amount_pkr
-    type: numeric
-    meaning: >-
-      The estimated ultimate cost of the claim - what NorthStar expects the claim to cost
-      in total, whether or not it has been paid yet. The right column for cost, exposure
-      and severity questions.
-    unit: PKR
-  - name: paid_amount_pkr
-    type: numeric
-    meaning: >-
-      Cash actually paid out on the claim so far. The right column for questions about
-      money that has left the business. Always less than or equal to incurred.
-    unit: PKR
-  - name: reserve_amount_pkr
-    type: numeric
-    meaning: >-
-      The amount still set aside to meet the remaining cost of the claim. Incurred is
-      paid plus reserve.
-    unit: PKR
-  - name: deductible_applied_pkr
-    type: numeric
-    meaning: >-
-      The deductible actually applied when settling this claim, taken from the policy
-      terms. Already reflected in paid_amount_pkr; do not subtract it again.
-    unit: PKR
+- name: claim_id
+  type: bigint
+  meaning: Surrogate key. Referenced by claim_payments.
+  sample_values:
+  - '300001'
+  - '300002'
+  - '300003'
+  - '300004'
+  - '300005'
+  - '300006'
+  - '300007'
+  - '300008'
+  stats:
+    total_count: 12000
+    distinct_count: 12000
+    null_count: 0
+    minimum: '300001'
+    maximum: '312000'
+- name: claim_number
+  type: text
+  meaning: The external claim reference, formatted CLM-1234. This is the reference printed on the
+    scanned inspection reports, plumber invoices and claim forms, so it is the join between this database
+    and the scanned document source.
+  sample_values:
+  - CLM-1000
+  - CLM-10000
+  - CLM-10001
+  - CLM-10002
+  - CLM-10003
+  - CLM-10004
+  - CLM-10005
+  - CLM-10006
+  stats:
+    total_count: 12000
+    distinct_count: 12000
+    null_count: 0
+- name: policy_id
+  type: bigint
+  meaning: The policy the claim was made against.
+  sample_values:
+  - '200002'
+  - '200003'
+  - '200005'
+  - '200006'
+  - '200007'
+  - '200008'
+  - '200009'
+  - '200010'
+  stats:
+    total_count: 12000
+    distinct_count: 5190
+    null_count: 0
+    minimum: '200002'
+    maximum: '206000'
+- name: adjuster_id
+  type: integer
+  meaning: The adjuster handling the claim. Null while a claim is unassigned.
+  sample_values:
+  - '1'
+  - '10'
+  - '11'
+  - '12'
+  - '13'
+  - '14'
+  - '15'
+  - '16'
+  stats:
+    total_count: 12000
+    distinct_count: 24
+    null_count: 480
+    minimum: '1'
+    maximum: '24'
+- name: region_id
+  type: integer
+  meaning: The region the loss occurred in. This is the region to group claims by; the adjuster's
+    base region is a different thing.
+  sample_values:
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  - '7'
+  - '8'
+  stats:
+    total_count: 12000
+    distinct_count: 9
+    null_count: 0
+    minimum: '1'
+    maximum: '9'
+- name: peril
+  type: text
+  meaning: The cause of loss as classified at first notification - for example water_damage, fire,
+    theft, storm, impact or liability. Classified from what was reported, and a later investigation
+    may contradict it.
+  sample_values:
+  - fire
+  - impact
+  - liability
+  - storm
+  - theft
+  - water_damage
+  value_set:
+  - fire
+  - impact
+  - liability
+  - storm
+  - theft
+  - water_damage
+  stats:
+    total_count: 12000
+    distinct_count: 6
+    null_count: 0
+- name: date_of_loss
+  type: date
+  meaning: The date the damage actually occurred. Use this for questions about when losses happened,
+    exposure periods, and whether the loss fell inside the period of cover.
+  sample_values:
+  - '2025-12-11'
+  - '2025-12-12'
+  - '2025-12-13'
+  - '2025-12-14'
+  - '2025-12-15'
+  - '2025-12-16'
+  - '2025-12-17'
+  - '2025-12-18'
+  stats:
+    total_count: 12000
+    distinct_count: 202
+    null_count: 0
+    minimum: '2025-12-11'
+    maximum: '2026-06-30'
+- name: report_date
+  type: date
+  meaning: The date the claim was notified to NorthStar. Use this for questions about claim volume,
+    workload and reporting trends. Always on or after date_of_loss.
+  sample_values:
+  - '2026-01-01'
+  - '2026-01-02'
+  - '2026-01-03'
+  - '2026-01-04'
+  - '2026-01-05'
+  - '2026-01-06'
+  - '2026-01-07'
+  - '2026-01-08'
+  stats:
+    total_count: 12000
+    distinct_count: 181
+    null_count: 0
+    minimum: '2026-01-01'
+    maximum: '2026-06-30'
+- name: closed_date
+  type: date
+  meaning: The date the claim was closed. Null while the claim is open.
+  sample_values:
+  - '2026-01-02'
+  - '2026-01-04'
+  - '2026-01-05'
+  - '2026-01-06'
+  - '2026-01-07'
+  - '2026-01-08'
+  - '2026-01-09'
+  - '2026-01-10'
+  stats:
+    total_count: 12000
+    distinct_count: 224
+    null_count: 4800
+    minimum: '2026-01-02'
+    maximum: '2026-08-14'
+- name: status
+  type: text
+  meaning: Workflow state of the claim file - open, closed, reopened, denied or withdrawn. An administrative
+    state recorded by the claims team, not a coverage decision this system may assert or infer.
+  sample_values:
+  - closed
+  - denied
+  - open
+  - reopened
+  - withdrawn
+  value_set:
+  - closed
+  - denied
+  - open
+  - reopened
+  - withdrawn
+  stats:
+    total_count: 12000
+    distinct_count: 5
+    null_count: 0
+- name: cause_description
+  type: text
+  meaning: Free-text description of the loss as recorded at notification, for example "escape of water
+    from a burst pipe under the kitchen sink". Useful for distinguishing a sudden event from gradual
+    damage, but it is a summary written by staff, not evidence in itself.
+  sample_values:
+  - Burglars broke a ground-floor window and stole household electronics
+  - Burst overhead water tank pipe flooded two rooms without warning
+  - Construction debris from a neighbouring site struck the roof
+  - Cooking oil fire spread from the kitchen to fitted cabinets
+  - Customer reported injury from a loose fitting inside the shop
+  - Delivery contractor reported injury in the insured loading area
+  - Delivery truck reversed into the insured shop frontage
+  - Electrical short circuit ignited wiring in the distribution board
+  stats:
+    total_count: 12000
+    distinct_count: 42
+    null_count: 0
+- name: incurred_amount_pkr
+  type: numeric
+  meaning: The estimated ultimate cost of the claim - what NorthStar expects the claim to cost in
+    total, whether or not it has been paid yet. The right column for cost, exposure and severity questions.
+  unit: PKR
+  sample_values:
+  - '0.00'
+  - '10000.00'
+  - '1000499.97'
+  - '1000519.57'
+  - '1000568.02'
+  - '1000773.60'
+  - '1000835.17'
+  - '1000856.43'
+  stats:
+    total_count: 12000
+    distinct_count: 9578
+    null_count: 0
+    minimum: '0.00'
+    maximum: '7923229.03'
+- name: paid_amount_pkr
+  type: numeric
+  meaning: Cash actually paid out on the claim so far. The right column for questions about money
+    that has left the business. Always less than or equal to incurred.
+  unit: PKR
+  sample_values:
+  - '0.00'
+  - '10000.00'
+  - '1000856.43'
+  - '1001312.83'
+  - '1001594.36'
+  - '1001837.16'
+  - '1001939.63'
+  - '1002034.15'
+  stats:
+    total_count: 12000
+    distinct_count: 7193
+    null_count: 0
+    minimum: '0.00'
+    maximum: '7880361.84'
+- name: reserve_amount_pkr
+  type: numeric
+  meaning: The amount still set aside to meet the remaining cost of the claim. Incurred is paid plus
+    reserve.
+  unit: PKR
+  sample_values:
+  - '0.00'
+  - '10000.00'
+  - '1000031.89'
+  - '1000406.06'
+  - '1000499.97'
+  - '1000568.02'
+  - '1001445.24'
+  - '1002449.08'
+  stats:
+    total_count: 12000
+    distinct_count: 4793
+    null_count: 0
+    minimum: '0.00'
+    maximum: '7899861.38'
+- name: deductible_applied_pkr
+  type: numeric
+  meaning: The deductible actually applied when settling this claim, taken from the policy terms.
+    Already reflected in paid_amount_pkr; do not subtract it again.
+  unit: PKR
+  sample_values:
+  - '0.00'
+  - '100000.00'
+  - '112500.00'
+  - '125000.00'
+  - '150000.00'
+  - '25000.00'
+  - '31250.00'
+  - '37500.00'
+  stats:
+    total_count: 12000
+    distinct_count: 12
+    null_count: 0
+    minimum: '0.00'
+    maximum: '150000.00'
 useful_for:
-  - Counting claims reported in a period, by region, peril or product.
-  - Measuring claim cost, either incurred or paid, by any of those groupings.
-  - Comparing when losses occurred against when they were reported.
-  - Finding the claims a scanned inspection report or invoice belongs to.
-  - Identifying claims whose recorded cause suggests a sudden event or gradual damage.
+- Counting claims reported in a period, by region, peril or product.
+- Measuring claim cost, either incurred or paid, by any of those groupings.
+- Comparing when losses occurred against when they were reported.
+- Finding the claims a scanned inspection report or invoice belongs to.
+- Identifying claims whose recorded cause suggests a sudden event or gradual damage.
 synonyms:
-  - term: claim reference
-    maps_to: claim_number
-  - term: claim number
-    maps_to: claim_number
-  - term: filed
-    maps_to: report_date
-  - term: notified
-    maps_to: report_date
-  - term: loss date
-    maps_to: date_of_loss
-  - term: cause of loss
-    maps_to: peril
-  - term: cost
-    maps_to: incurred_amount_pkr
-  - term: settled amount
-    maps_to: paid_amount_pkr
-  - term: outstanding
-    maps_to: reserve_amount_pkr
+- term: claim reference
+  maps_to: claim_number
+- term: claim number
+  maps_to: claim_number
+- term: filed
+  maps_to: report_date
+- term: notified
+  maps_to: report_date
+- term: loss date
+  maps_to: date_of_loss
+- term: cause of loss
+  maps_to: peril
+- term: cost
+  maps_to: incurred_amount_pkr
+- term: settled amount
+  maps_to: paid_amount_pkr
+- term: outstanding
+  maps_to: reserve_amount_pkr
 joins:
-  - column: policy_id
-    references: ops.policies.policy_id
-    meaning: >-
-      The policy claimed against. Needed for the product, the deductible and the sum
-      insured that apply.
-  - column: adjuster_id
-    references: ops.adjusters.adjuster_id
-    meaning: The adjuster handling the claim. Nullable, so an inner join drops unassigned claims.
-  - column: region_id
-    references: ops.regions.region_id
-    meaning: The region the loss occurred in.
+- column: policy_id
+  references: ops.policies.policy_id
+  meaning: The policy claimed against. Needed for the product, the deductible and the sum insured
+    that apply.
+- column: adjuster_id
+  references: ops.adjusters.adjuster_id
+  meaning: The adjuster handling the claim. Nullable, so an inner join drops unassigned claims.
+- column: region_id
+  references: ops.regions.region_id
+  meaning: The region the loss occurred in.
 cautions:
-  - >-
-    date_of_loss and report_date are different questions. "Claims filed in March" means
-    report_date; "losses that occurred in March" means date_of_loss. The two diverge
-    whenever reporting is delayed, which is exactly when the difference matters.
-  - >-
-    incurred_amount_pkr, paid_amount_pkr and reserve_amount_pkr are three different
-    quantities. Incurred is the expected ultimate cost, paid is cash already out, reserve
-    is what remains set aside, and incurred equals paid plus reserve. Summing more than
-    one of them together double counts.
-  - >-
-    A claim's status is a workflow state, not a coverage determination. A denied or
-    withdrawn claim must never be reported as a decision this system reached, and a
-    closed claim is not an approved one.
-  - >-
-    peril and cause_description record what was reported at notification. A scanned
-    inspection report may describe a different cause; where they disagree, both should be
-    reported rather than one silently preferred.
-  - >-
-    An inner join to adjusters drops claims with no adjuster assigned. Use a left join
-    unless the question is specifically about assigned claims.
+- date_of_loss and report_date are different questions. "Claims filed in March" means report_date;
+  "losses that occurred in March" means date_of_loss. The two diverge whenever reporting is delayed,
+  which is exactly when the difference matters.
+- incurred_amount_pkr, paid_amount_pkr and reserve_amount_pkr are three different quantities. Incurred
+  is the expected ultimate cost, paid is cash already out, reserve is what remains set aside, and
+  incurred equals paid plus reserve. Summing more than one of them together double counts.
+- A claim's status is a workflow state, not a coverage determination. A denied or withdrawn claim
+  must never be reported as a decision this system reached, and a closed claim is not an approved
+  one.
+- peril and cause_description record what was reported at notification. A scanned inspection report
+  may describe a different cause; where they disagree, both should be reported rather than one silently
+  preferred.
+- An inner join to adjusters drops claims with no adjuster assigned. Use a left join unless the question
+  is specifically about assigned claims.
 invariants:
-  - kind: sum
-    total: incurred_amount_pkr
-    parts: [paid_amount_pkr, reserve_amount_pkr]
-    meaning: >-
-      Incurred is paid plus reserve. A total that does not add up almost always means the
-      three columns were aggregated over different sets of rows, which a join can do
-      invisibly.
-  - kind: ordered
-    lower: paid_amount_pkr
-    upper: incurred_amount_pkr
-    meaning: Cash already paid can never exceed the expected ultimate cost.
-  - kind: non_negative
-    column: incurred_amount_pkr
-    meaning: An estimate of ultimate cost cannot be negative.
-  - kind: non_negative
-    column: paid_amount_pkr
-    meaning: >-
-      Cash paid out on a claim cannot be negative. Money received back is a recovery, and
-      is recorded in ops.claim_payments rather than here.
-  - kind: non_negative
-    column: reserve_amount_pkr
-    meaning: A reserve is money still set aside to be paid; it cannot be negative.
-  - kind: non_negative
-    column: deductible_applied_pkr
-    meaning: A deductible reduces what the insurer pays; it is never a credit.
-  - kind: ordered
-    lower: date_of_loss
-    upper: report_date
-    meaning: A loss cannot be reported before it happened.
-  - kind: ordered
-    lower: report_date
-    upper: closed_date
-    meaning: A claim cannot be closed before it was reported.
+- kind: sum
+  total: incurred_amount_pkr
+  parts:
+  - paid_amount_pkr
+  - reserve_amount_pkr
+  meaning: Incurred is paid plus reserve. A total that does not add up almost always means the three
+    columns were aggregated over different sets of rows, which a join can do invisibly.
+- kind: ordered
+  lower: paid_amount_pkr
+  upper: incurred_amount_pkr
+  meaning: Cash already paid can never exceed the expected ultimate cost.
+- kind: non_negative
+  column: incurred_amount_pkr
+  meaning: An estimate of ultimate cost cannot be negative.
+- kind: non_negative
+  column: paid_amount_pkr
+  meaning: Cash paid out on a claim cannot be negative. Money received back is a recovery, and is
+    recorded in ops.claim_payments rather than here.
+- kind: non_negative
+  column: reserve_amount_pkr
+  meaning: A reserve is money still set aside to be paid; it cannot be negative.
+- kind: non_negative
+  column: deductible_applied_pkr
+  meaning: A deductible reduces what the insurer pays; it is never a credit.
+- kind: ordered
+  lower: date_of_loss
+  upper: report_date
+  meaning: A loss cannot be reported before it happened.
+- kind: ordered
+  lower: report_date
+  upper: closed_date
+  meaning: A claim cannot be closed before it was reported.

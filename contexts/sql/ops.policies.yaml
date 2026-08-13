@@ -2,105 +2,254 @@
 # `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
 schema: ops
 table: policies
-purpose: >-
-  The contracts of insurance in force and lapsed, one row per policy. A policy links a
-  customer to a product for a period of cover, and carries the money terms - sum insured,
-  deductible, premium - that a claim is settled against.
+purpose: The contracts of insurance in force and lapsed, one row per policy. A policy links a customer
+  to a product for a period of cover, and carries the money terms - sum insured, deductible, premium
+  - that a claim is settled against.
 columns:
-  - name: policy_id
-    type: bigint
-    meaning: Surrogate key. Referenced by claims.
-  - name: policy_number
-    type: text
-    meaning: The reference quoted to the customer and printed on documents.
-  - name: customer_id
-    type: bigint
-    meaning: The policyholder.
-  - name: product_id
-    type: integer
-    meaning: The product whose wording governs this policy.
-  - name: region_id
-    type: integer
-    meaning: The region the risk sits in.
-  - name: inception_date
-    type: date
-    meaning: The date cover began. A loss before this date is not covered by this policy.
-  - name: expiry_date
-    type: date
-    meaning: The date cover ends.
-  - name: status
-    type: text
-    meaning: >-
-      Administrative state of the policy - active, lapsed or cancelled. A workflow state,
-      not a statement about any claim.
-  - name: sum_insured_pkr
-    type: numeric
-    meaning: >-
-      The maximum payable under this policy for the period of cover. A ceiling, never an
-      amount paid.
-    unit: PKR
-  - name: deductible_pkr
-    type: numeric
-    meaning: >-
-      The amount the insured bears on each claim under this policy. Subtracted from a
-      loss before the insurer pays. This is the policy-specific figure; the product
-      default is ops.coverage_products.base_deductible_pkr.
-    unit: PKR
-  - name: annual_premium_pkr
-    type: numeric
-    meaning: The annual amount the customer pays for cover. Income, not exposure.
-    unit: PKR
+- name: policy_id
+  type: bigint
+  meaning: Surrogate key. Referenced by claims.
+  sample_values:
+  - '200001'
+  - '200002'
+  - '200003'
+  - '200004'
+  - '200005'
+  - '200006'
+  - '200007'
+  - '200008'
+  stats:
+    total_count: 6000
+    distinct_count: 6000
+    null_count: 0
+    minimum: '200001'
+    maximum: '206000'
+- name: policy_number
+  type: text
+  meaning: The reference quoted to the customer and printed on documents.
+  sample_values:
+  - POL-2026-000001
+  - POL-2026-000002
+  - POL-2026-000003
+  - POL-2026-000004
+  - POL-2026-000005
+  - POL-2026-000006
+  - POL-2026-000007
+  - POL-2026-000008
+  stats:
+    total_count: 6000
+    distinct_count: 6000
+    null_count: 0
+- name: customer_id
+  type: bigint
+  meaning: The policyholder.
+  sample_values:
+  - '100001'
+  - '100002'
+  - '100003'
+  - '100004'
+  - '100005'
+  - '100006'
+  - '100007'
+  - '100008'
+  stats:
+    total_count: 6000
+    distinct_count: 4000
+    null_count: 0
+    minimum: '100001'
+    maximum: '104000'
+- name: product_id
+  type: integer
+  meaning: The product whose wording governs this policy.
+  sample_values:
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  stats:
+    total_count: 6000
+    distinct_count: 6
+    null_count: 0
+    minimum: '1'
+    maximum: '6'
+- name: region_id
+  type: integer
+  meaning: The region the risk sits in.
+  sample_values:
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  - '7'
+  - '8'
+  stats:
+    total_count: 6000
+    distinct_count: 9
+    null_count: 0
+    minimum: '1'
+    maximum: '9'
+- name: inception_date
+  type: date
+  meaning: The date cover began. A loss before this date is not covered by this policy.
+  sample_values:
+  - '2025-01-01'
+  - '2025-01-02'
+  - '2025-01-03'
+  - '2025-01-04'
+  - '2025-01-05'
+  - '2025-01-06'
+  - '2025-01-07'
+  - '2025-01-08'
+  stats:
+    total_count: 6000
+    distinct_count: 181
+    null_count: 0
+    minimum: '2025-01-01'
+    maximum: '2025-06-30'
+- name: expiry_date
+  type: date
+  meaning: The date cover ends.
+  sample_values:
+  - '2026-12-31'
+  - '2027-01-01'
+  - '2027-01-02'
+  - '2027-01-03'
+  - '2027-01-04'
+  - '2027-01-05'
+  - '2027-01-06'
+  - '2027-01-07'
+  stats:
+    total_count: 6000
+    distinct_count: 181
+    null_count: 0
+    minimum: '2026-12-31'
+    maximum: '2027-06-29'
+- name: status
+  type: text
+  meaning: Administrative state of the policy - active, lapsed or cancelled. A workflow state, not
+    a statement about any claim.
+  sample_values:
+  - active
+  - cancelled
+  - lapsed
+  value_set:
+  - active
+  - cancelled
+  - lapsed
+  stats:
+    total_count: 6000
+    distinct_count: 3
+    null_count: 0
+- name: sum_insured_pkr
+  type: numeric
+  meaning: The maximum payable under this policy for the period of cover. A ceiling, never an amount
+    paid.
+  unit: PKR
+  sample_values:
+  - '10006000.00'
+  - '10006500.00'
+  - '10012500.00'
+  - '10014000.00'
+  - '10015500.00'
+  - '10022000.00'
+  - '10024000.00'
+  - '10026000.00'
+  stats:
+    total_count: 6000
+    distinct_count: 5099
+    null_count: 0
+    minimum: '2500000.00'
+    maximum: '24987500.00'
+- name: deductible_pkr
+  type: numeric
+  meaning: The amount the insured bears on each claim under this policy. Subtracted from a loss before
+    the insurer pays. This is the policy-specific figure; the product default is ops.coverage_products.base_deductible_pkr.
+  unit: PKR
+  sample_values:
+  - '100000.00'
+  - '112500.00'
+  - '125000.00'
+  - '150000.00'
+  - '25000.00'
+  - '31250.00'
+  - '37500.00'
+  - '50000.00'
+  stats:
+    total_count: 6000
+    distinct_count: 11
+    null_count: 0
+    minimum: '25000.00'
+    maximum: '150000.00'
+- name: annual_premium_pkr
+  type: numeric
+  meaning: The annual amount the customer pays for cover. Income, not exposure.
+  unit: PKR
+  sample_values:
+  - '100001.25'
+  - '100009.35'
+  - '100031.40'
+  - '100038.40'
+  - '100058.25'
+  - '100094.40'
+  - '100095.90'
+  - '100096.00'
+  stats:
+    total_count: 6000
+    distinct_count: 5963
+    null_count: 0
+    minimum: '11534.50'
+    maximum: '364561.00'
 useful_for:
-  - Counting policies in force, by product, region or period.
-  - Finding the terms - sum insured, deductible - that apply to a claim.
-  - Summing premium income by region or product.
-  - Checking whether a date of loss falls inside a policy's period of cover.
+- Counting policies in force, by product, region or period.
+- Finding the terms - sum insured, deductible - that apply to a claim.
+- Summing premium income by region or product.
+- Checking whether a date of loss falls inside a policy's period of cover.
 synonyms:
-  - term: policy reference
-    maps_to: policy_number
-  - term: start date
-    maps_to: inception_date
-  - term: renewal date
-    maps_to: expiry_date
-  - term: excess
-    maps_to: deductible_pkr
-  - term: coverage amount
-    maps_to: sum_insured_pkr
+- term: policy reference
+  maps_to: policy_number
+- term: start date
+  maps_to: inception_date
+- term: renewal date
+  maps_to: expiry_date
+- term: excess
+  maps_to: deductible_pkr
+- term: coverage amount
+  maps_to: sum_insured_pkr
 joins:
-  - column: customer_id
-    references: ops.customers.customer_id
-    meaning: The policyholder who bought the policy.
-  - column: product_id
-    references: ops.coverage_products.product_id
-    meaning: The product whose wording governs the policy.
-  - column: region_id
-    references: ops.regions.region_id
-    meaning: The region the insured risk sits in.
+- column: customer_id
+  references: ops.customers.customer_id
+  meaning: The policyholder who bought the policy.
+- column: product_id
+  references: ops.coverage_products.product_id
+  meaning: The product whose wording governs the policy.
+- column: region_id
+  references: ops.regions.region_id
+  meaning: The region the insured risk sits in.
 cautions:
-  - >-
-    A deductible is not a limit. deductible_pkr is what the insured bears on each claim
-    and reduces what the insurer pays; sum_insured_pkr is the ceiling on the payout and
-    is never itself paid. Summing sum_insured_pkr measures exposure, not cost.
-  - >-
-    annual_premium_pkr is income and belongs to no claim. Never combine it with claim
-    amounts in one total.
-  - >-
-    A policy's status is administrative. It says nothing about whether any claim under it
-    is payable; that is decided against the policy wording.
-  - >-
-    Cover is a period, not a flag. A policy is in force for a given date when that date
-    is between inception_date and expiry_date, regardless of status today.
+- A deductible is not a limit. deductible_pkr is what the insured bears on each claim and reduces
+  what the insurer pays; sum_insured_pkr is the ceiling on the payout and is never itself paid. Summing
+  sum_insured_pkr measures exposure, not cost.
+- annual_premium_pkr is income and belongs to no claim. Never combine it with claim amounts in one
+  total.
+- A policy's status is administrative. It says nothing about whether any claim under it is payable;
+  that is decided against the policy wording.
+- Cover is a period, not a flag. A policy is in force for a given date when that date is between inception_date
+  and expiry_date, regardless of status today.
 invariants:
-  - kind: ordered
-    lower: inception_date
-    upper: expiry_date
-    meaning: Cover cannot expire before it began.
-  - kind: non_negative
-    column: sum_insured_pkr
-    meaning: A ceiling on what is payable cannot be negative.
-  - kind: non_negative
-    column: deductible_pkr
-    meaning: The amount the insured bears cannot be negative.
-  - kind: non_negative
-    column: annual_premium_pkr
-    meaning: Premium is income received; it cannot be negative.
+- kind: ordered
+  lower: inception_date
+  upper: expiry_date
+  meaning: Cover cannot expire before it began.
+- kind: non_negative
+  column: sum_insured_pkr
+  meaning: A ceiling on what is payable cannot be negative.
+- kind: non_negative
+  column: deductible_pkr
+  meaning: The amount the insured bears cannot be negative.
+- kind: non_negative
+  column: annual_premium_pkr
+  meaning: Premium is income received; it cannot be negative.

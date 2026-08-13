@@ -2,67 +2,146 @@
 # `uv run python scripts/refresh_contexts.py`; everything else is edited by a human.
 schema: ops
 table: coverage_products
-purpose: >-
-  The property products NorthStar sells, one row per product. This table is the bridge to
-  the policy-wording source: policy_document names the PDF whose clauses govern claims
-  made under the product, so a question about what is covered starts here and finishes in
-  the policy documents.
+purpose: 'The property products NorthStar sells, one row per product. This table is the bridge to
+  the policy-wording source: policy_document names the PDF whose clauses govern claims made under
+  the product, so a question about what is covered starts here and finishes in the policy documents.'
 columns:
-  - name: product_id
-    type: integer
-    meaning: Surrogate key. Referenced by policies.
-  - name: product_code
-    type: text
-    meaning: Short internal code for the product, for example "HSP".
-  - name: product_name
-    type: text
-    meaning: >-
-      Marketed name, for example "HomeSecure Plus" or "SME Property Shield". This is what
-      a question will name.
-  - name: policy_document
-    type: text
-    meaning: >-
-      Filename of the policy wording that governs this product, as indexed by the policy
-      document source. The link that lets a claim be read against the clause covering it.
-  - name: base_deductible_pkr
-    type: numeric
-    meaning: >-
-      The standard amount the insured bears on each claim under this product, before any
-      endorsement. The amount actually applied to a given policy is
-      ops.policies.deductible_pkr.
-    unit: PKR
-  - name: coverage_limit_pkr
-    type: numeric
-    meaning: >-
-      The maximum this product will pay for a single claim. A ceiling on the payout, not
-      an amount that is ever paid or subtracted.
-    unit: PKR
+- name: product_id
+  type: integer
+  meaning: Surrogate key. Referenced by policies.
+  sample_values:
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  stats:
+    total_count: 6
+    distinct_count: 6
+    null_count: 0
+    minimum: '1'
+    maximum: '6'
+- name: product_code
+  type: text
+  meaning: Short internal code for the product, for example "HSP".
+  sample_values:
+  - FIR
+  - FLD
+  - HSB
+  - HSP
+  - LLP
+  - SPS
+  value_set:
+  - FIR
+  - FLD
+  - HSB
+  - HSP
+  - LLP
+  - SPS
+  stats:
+    total_count: 6
+    distinct_count: 6
+    null_count: 0
+- name: product_name
+  type: text
+  meaning: Marketed name, for example "HomeSecure Plus" or "SME Property Shield". This is what a question
+    will name.
+  sample_values:
+  - Fire Protection
+  - Flood Protection
+  - HomeSecure Basic
+  - HomeSecure Plus
+  - Landlord Protect
+  - SME Property Shield
+  value_set:
+  - Fire Protection
+  - Flood Protection
+  - HomeSecure Basic
+  - HomeSecure Plus
+  - Landlord Protect
+  - SME Property Shield
+  stats:
+    total_count: 6
+    distinct_count: 6
+    null_count: 0
+- name: policy_document
+  type: text
+  meaning: Filename of the policy wording that governs this product, as indexed by the policy document
+    source. The link that lets a claim be read against the clause covering it.
+  sample_values:
+  - Fire_Protection_2026.pdf
+  - Flood_Protection_2026.pdf
+  - HomeSecure_Basic_2026.pdf
+  - HomeSecure_Plus_2026.pdf
+  - Landlord_Protect_2026.pdf
+  - SME_Property_Shield_2026.pdf
+  value_set:
+  - Fire_Protection_2026.pdf
+  - Flood_Protection_2026.pdf
+  - HomeSecure_Basic_2026.pdf
+  - HomeSecure_Plus_2026.pdf
+  - Landlord_Protect_2026.pdf
+  - SME_Property_Shield_2026.pdf
+  stats:
+    total_count: 6
+    distinct_count: 6
+    null_count: 0
+- name: base_deductible_pkr
+  type: numeric
+  meaning: The standard amount the insured bears on each claim under this product, before any endorsement.
+    The amount actually applied to a given policy is ops.policies.deductible_pkr.
+  unit: PKR
+  sample_values:
+  - '100000'
+  - '25000'
+  - '50000'
+  - '75000'
+  stats:
+    total_count: 6
+    distinct_count: 4
+    null_count: 0
+    minimum: '25000'
+    maximum: '100000'
+- name: coverage_limit_pkr
+  type: numeric
+  meaning: The maximum this product will pay for a single claim. A ceiling on the payout, not an amount
+    that is ever paid or subtracted.
+  unit: PKR
+  sample_values:
+  - '10000000'
+  - '15000000'
+  - '20000000'
+  - '25000000'
+  - '5000000'
+  stats:
+    total_count: 6
+    distinct_count: 5
+    null_count: 0
+    minimum: '5000000'
+    maximum: '25000000'
 useful_for:
-  - Identifying which product a policy or claim sits under.
-  - Finding the policy wording document that governs a claim.
-  - Comparing standard deductibles or limits across products.
+- Identifying which product a policy or claim sits under.
+- Finding the policy wording document that governs a claim.
+- Comparing standard deductibles or limits across products.
 synonyms:
-  - term: plan
-    maps_to: product_name
-  - term: cover
-    maps_to: product_name
-  - term: policy wording
-    maps_to: policy_document
+- term: plan
+  maps_to: product_name
+- term: cover
+  maps_to: product_name
+- term: policy wording
+  maps_to: policy_document
 cautions:
-  - >-
-    base_deductible_pkr is the product default. A policy may carry a different
-    deductible; when a question concerns a specific claim or policy, read
-    ops.policies.deductible_pkr instead.
-  - >-
-    coverage_limit_pkr is a ceiling, never a payment. Do not sum it, and never compare it
-    with paid or incurred amounts as though they were the same quantity.
-  - >-
-    Whether a particular loss is covered is decided by the wording in policy_document,
-    not by anything in this table. Nothing here is a coverage determination.
+- base_deductible_pkr is the product default. A policy may carry a different deductible; when a question
+  concerns a specific claim or policy, read ops.policies.deductible_pkr instead.
+- coverage_limit_pkr is a ceiling, never a payment. Do not sum it, and never compare it with paid
+  or incurred amounts as though they were the same quantity.
+- Whether a particular loss is covered is decided by the wording in policy_document, not by anything
+  in this table. Nothing here is a coverage determination.
 invariants:
-  - kind: non_negative
-    column: base_deductible_pkr
-    meaning: A product's default deductible cannot be negative.
-  - kind: non_negative
-    column: coverage_limit_pkr
-    meaning: A product's coverage ceiling cannot be negative.
+- kind: non_negative
+  column: base_deductible_pkr
+  meaning: A product's default deductible cannot be negative.
+- kind: non_negative
+  column: coverage_limit_pkr
+  meaning: A product's coverage ceiling cannot be negative.
