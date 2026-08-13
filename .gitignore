@@ -29,6 +29,8 @@ data/corpus_manifest.json
 # The ops corpus loads straight into Postgres and writes no files today. Listed anyway,
 # because the day it does is the day 12,000 generated rows get committed by accident.
 data/ops/
+# scripts/replay.py's measurement records: rebuildable, and each run costs live quota.
+data/replay/
 
 # --- evaluation output ---
 eval/results/

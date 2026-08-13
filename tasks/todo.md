@@ -226,6 +226,36 @@ C-7.11 precedent.
 resolving, a policy-only question invokes exactly one tool, and an out-of-scope question refuses
 with zero tool calls.
 
+### Reliability addendum (2026-08-13)
+
+C-8 closed carrying six unresolved items: four technical deferrals recorded in its review, and
+two open product questions it declined to settle alone. C-9 puts HTTP over `run_question` and
+C-10 puts a UI over that, so both build on the contracts these items are about — the tool
+signature, the trace id, and the answer path's reliability. A contract fixed after the API is
+written is fixed in two places. Four cards settle them first.
+
+Two deferrals stay deferred, with their consequences recorded. **Tool-internal model spend is
+invisible to the state** — `_source_node` leaves `StageRecord.cost_usd` at 0.0, so every call
+the SQL and spreadsheet tools make appears in no stage and `GraphState.total_cost_usd`
+under-reports a four-source question by most of its cost. C-9.3 and C-10.6 must therefore read
+`gateway.ledger.total_cost_usd`, never `state.total_cost_usd`. And **the BM25 rebuild is
+unscoped**: both searchers sign over `store.all_chunks()` unfiltered, so they build the
+identical index and cannot corrupt each other's file. Latency only; revisit if C-11 makes it
+visible.
+
+- [x] **C-8.9** `scripts/replay.py` — put one question through the graph N times and record
+      what varied: routing, per-source evidence counts, the verifier's verdict and its
+      objections, which model wrote each stage, fallbacks walked, and cost. — `N`
+- [ ] **C-8.10** Widen `SourceTool` to `Callable[[str, SourceRequest], Sequence[Evidence]]`,
+      carrying `understanding` and `trace_id` in a frozen per-call request. Unstrands C-5.5's
+      entity resolver and writes `Provenance.trace_id`. — `N`
+- [ ] **C-8.11** Fix the cause C-8.9 named. — `N`
+- [ ] **C-8.12** The four-clause flagship question, run live with no `contexts/` edits; and
+      delete the two `pyproject.toml` entry points that name modules which do not exist. — `N`
+
+**Acceptance:** ten runs recorded and their differences named; a source tool receives the
+run's understanding; the flagship question resolves citations from all four sources.
+
 ## Phase C-9 — API + streaming
 
 - [ ] **C-9.1** `api/protocol.py` — NDJSON event schema. — `V` both repos
@@ -785,3 +815,60 @@ a comment.
 and not classified as currency by the other. Harmless on a PKR corpus and left alone rather
 than folded into a no-behaviour-change task, but it is a second definition of the same list
 and belongs in one place.
+
+### C-8.9 — the variance, measured
+
+**What was asked.** The same question had returned a verified answer on one run and a
+degraded one on another, and nothing was known about why. Four causes could produce that
+symptom: (a) a source returning nothing on one run, (b) a SQL filter on a value the database
+does not hold, (c) a fallback putting a different model on the answer, or (d) ordinary
+sampling variance. They are distinguished by different fields of the same record, so the card
+measures before anything is fixed.
+
+**Evidence.** Ten runs, written to NDJSON — five of the flagship question, five of the
+policy-only control. Offline suite **1440 passed**, ruff clean. Every run cost $0.000000.
+
+| | flagship (n=5) | policy-only (n=5) |
+|---|---|---|
+| verified | **5 / 5** | **5 / 5** |
+| degraded | 0 | 0 |
+| model calls per run | 21–30 | 6–8 |
+| evidence retrieved | 15–19 | 5 |
+| evidence **uncited** | 10–16 | 1–3 |
+| varied across runs | evidence counts only | nothing |
+
+**The degraded outcome did not reproduce.** Said plainly because the card's acceptance was
+written expecting it to: ten for ten verified. What the runs found instead is a defect that
+would produce exactly that symptom, and a control that isolates it.
+
+**Hypothesis (c) is confirmed, and the mechanism is narrower than "a fallback changed the
+model".** All ten runs executed with `gemini-3.5-flash` already at **250/250** for the day, so
+every `strong` task — plan, synthesize, verify — ran on its fallback rather than its primary.
+The fallback ladder is **inverted between two tiers**:
+
+- `strong` is flash (250/day) falling back to flash-lite (1000/day). It degrades *onto the
+  larger pool*, which is why all ten runs still verified with flash entirely spent.
+- `mid` is flash-lite falling back to **flash** — the *smaller* pool, and the one that runs out
+  first. Once flash's daily allowance is gone, a `mid` task walking its ladder finds only the
+  paid rung, which fails closed exactly as C-1.7 designed it to.
+
+Flagship run 5 is that failure, recorded verbatim: *"Task 'sql_generator' exhausted its free
+models and the remaining fallbacks are paid."* `sql_generator`, `sql_refiner` and
+`sql_unit_tester` are all `mid`, and `config.yaml`'s own comment measures `sql_generator` at
+nine calls in a single question — so `mid` is the highest-volume tier and the one with nowhere
+to go. Enough of those failing leaves the sources with little to return, which leaves synthesis
+with little to cite, which is the reported symptom.
+
+The comment at `config.yaml:146-147` is true of a *per-minute* limit and false of a *per-day*
+one: flash has somewhere free to go, and flash does not.
+
+**A second finding, unlooked-for and consistent.** The flagship question leaves **10–16 of its
+15–19 evidence items uncited**, on every run. The policy-only control leaves 1–3 of 5. This is
+the cross-source completeness gap the C-8 review named, now measured rather than observed once,
+and it is the strongest available argument for C-11.2's completeness scorer.
+
+**Recorded as a limitation of the measurement, not hidden.** Ten runs on one day cannot
+establish a rate for an intermittent outcome, and every one of them ran against an already-
+exhausted flash allowance — an unrepresentative condition that happens to be the one that
+exposed the defect. The honest statement is that a real defect was found and the historical
+degradation was not reproduced.
