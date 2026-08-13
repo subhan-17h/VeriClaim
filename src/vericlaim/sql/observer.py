@@ -52,7 +52,27 @@ from vericlaim.sql.planner import PlanStep
 SUM_TOLERANCE = Decimal("0.01")
 
 AGGREGATE_TERMS = ("count", "average", "avg", "sum", "minimum", "maximum", "min", "max")
-GROUPED_TERMS = ("group by", "per ", "each ", "distribution", "breakdown", "rank", "top ")
+# "group" as a stem, not the phrase "group by": the planner writes this field in prose
+# and conjugates it freely -- "grouped by region", "grouping by region" -- and matching
+# only the SQL keyword missed the forms a model actually writes. The failure was not a
+# missed warning but a rejected correct answer: a real GROUP BY was called a scalar that
+# returned too many rows, and the repair loop then spent its whole budget rewriting a
+# query that was already right. A stray "age group" merely skips the arity check, which
+# is the safe direction to be wrong in.
+GROUPED_TERMS = ("group", "per ", "each ", "distribution", "breakdown", "rank", "top ")
+
+# Phrases that mention grouping in order to rule it out. Removed before the search
+# above, the same way thresholds are removed before the superlative search: a plan
+# saying "with no grouping" is the clearest possible statement that one row is expected,
+# and a bare stem match would read it as the opposite.
+UNGROUPED_TERMS = (
+    "no grouping",
+    "no group",
+    "without grouping",
+    "without group",
+    "not grouped",
+    "ungrouped",
+)
 SUPERLATIVE_TERMS = (
     "most",
     "least",
@@ -184,9 +204,12 @@ def _expects_scalar(calculations: str) -> bool:
     superlative = any(
         re.search(rf"\b{re.escape(term)}", threshold_free) for term in SUPERLATIVE_TERMS
     )
+    grouped_free = calculations
+    for phrase in UNGROUPED_TERMS:
+        grouped_free = grouped_free.replace(phrase, "")
     return (
         any(term in calculations for term in AGGREGATE_TERMS)
-        and not any(term in calculations for term in GROUPED_TERMS)
+        and not any(term in grouped_free for term in GROUPED_TERMS)
         and not superlative
     )
 

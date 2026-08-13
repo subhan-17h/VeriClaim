@@ -21,6 +21,8 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from vericlaim.sql.contexts import (
     ColumnContext,
     NonNegativeInvariant,
@@ -173,6 +175,37 @@ def test_a_grouped_aggregate_is_expected_to_have_many_rows() -> None:
     )
 
     assert observation.verdict == "ok"
+
+
+@pytest.mark.parametrize(
+    "calculations",
+    [
+        "Counted the claims. Grouped by region_name.",
+        "COUNT(*) of claims, grouping by region_name.",
+        "Count of claims. Group by region_name.",
+    ],
+)
+def test_grouping_is_recognised_however_the_planner_conjugates_it(
+    calculations: str,
+) -> None:
+    """The planner writes this field in prose, and it varies run to run.
+
+    Matching the exact phrase "group by" missed "grouped by", which is the form a model
+    most often writes. The result was that a correct GROUP BY was rejected as a scalar
+    that came back with too many rows, the repair loop rewrote a query that was already
+    right, and the step failed with no_progress after exhausting its budget.
+    """
+    observation = observe(
+        result(
+            "SELECT region_name, COUNT(*) FROM ops.claims GROUP BY region_name",
+            ("region_name", "count"),
+            ((1, 3), (2, 4), (3, 5)),
+        ),
+        step(calculations),
+        CONTEXTS,
+    )
+
+    assert observation.verdict == "ok", calculations
 
 
 def test_a_superlative_may_return_every_tied_row() -> None:
