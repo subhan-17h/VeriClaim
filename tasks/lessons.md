@@ -156,3 +156,38 @@ figures. Check that the relevant clause contains the coverage and exclusion conc
 deductibles and overall limits agree with their source of truth, and that sub-limits do not exceed
 the overall limit. Do not freeze editorial prose or prohibit legitimate figures merely because a
 shorter assertion is easier to write.
+
+---
+
+## LESSON-11 — A component is not proven until it has met its real inputs
+
+**Pattern:** Phase C-8 opened with 1348 green tests and no data. Feeding the system found five
+defects in code every one of those tests already covered: the indexer wiped one source while
+indexing the other, the observer rejected correct results twice over for two different phrasing
+reasons, the rate limiter's wait ceiling was shorter than one question, and committed fixtures
+were irreproducible despite a plan that had named the cause. Each was invisible because the
+fixtures were small, single-source, and phrased the way the test author phrased them.
+
+**Rule:** When a component's inputs come from a model or from another component, its tests are a
+sample of one phrasing. Before calling such a component done, run it against real, varied,
+multi-source input and read the failures — and when a test passes that you expected to fail,
+find out why before believing it. Two specific traps seen here: a test that passes for the wrong
+reason (the grouped-result test matched on `"per "`, so the missing `"grouped by"` stayed hidden
+for as long as every phrase carried a second grouping word), and a check that fails open (a
+validator rule that silently judged nothing reported the same clean result as one that judged
+everything and found no problem). State explicitly, in the assertion or the finding, which case
+you are in.
+
+---
+
+## LESSON-12 — Make the test fail before you believe it
+
+**Pattern:** The first test written for "grouping stated in the purpose is still grouping" passed
+immediately against the unfixed code. Its `calculations` field named no aggregate, so the arity
+check never engaged at all and the test proved nothing. Only a step naming an aggregate in one
+field and its grouping in the other actually reproduced the live failure.
+
+**Rule:** A regression test that passes before the fix is not a regression test. Run it against
+the unfixed code and require the failure, and require the failure to be the *same* one observed
+in the wild rather than merely some failure. This is cheap, it takes one command, and it is the
+only thing separating a test that guards a defect from a test that documents a guess.

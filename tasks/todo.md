@@ -198,8 +198,8 @@ column; the coercion reads the same amount whatever marks its currency; offline 
 - [x] **C-8.2** 10–14 policy PDFs incl. the sudden-vs-gradual water clause. — `N`
 - [x] **C-8.3** 6 deliberately messy `.xlsx` — exactly the six `contexts/sheets/` declares, since
       every workbook needs a reviewed context and a test asserts the names agree. — `N`
-- [ ] **C-8.4** 60–80 image-only scanned PDFs keyed to real `claim_id`s, ~20% degraded. — `N`
-- [ ] **C-8.5** Cross-source consistency validator. — `N`
+- [x] **C-8.4** 60–80 image-only scanned PDFs keyed to real `claim_id`s, ~20% degraded. — `N`
+- [x] **C-8.5** Cross-source consistency validator. — `N`
 
 **Acceptance:** `generate_corpus.py --seed 42` is reproducible; consistency validator passes.
 
@@ -213,10 +213,10 @@ acceptance C-5 and C-7 have both been carrying as "not yet demonstrable". A thir
 blocking defect found while verifying C-8.1. Existing numbers are unchanged, per the C-1.7 and
 C-7.11 precedent.
 
-- [ ] **C-8.6** The loader — walk `data/` through the existing `index_corpus`,
+- [x] **C-8.6** The loader — walk `data/` through the existing `index_corpus`,
       `index_scanned_corpus` and `ingest_workbook`. No new indexing logic, and two distinct
       manifest paths so the second pass cannot delete the first's chunks. — `V` CSRS
-- [ ] **C-8.7** `orchestrator/tools.py` — the registry handing the four real tools to
+- [x] **C-8.7** `orchestrator/tools.py` — the registry handing the four real tools to
       `build_graph`, sharing one embedder, `ChunkStore` and `Database` across them. No
       module-level globals. Plus `scripts/ask.py`, the repo's first CLI entry point. — `N`
 - [x] **C-8.8** Stop the offline suite billing the real spend ledger. Taken out of order because
@@ -579,6 +579,81 @@ side by side on one sheet would be read as one, which the corpus does not do and
 docstring records.
 
 **No lessons recorded.** No user corrections during this phase.
+
+### Phase C-8 — closed
+
+**Delivered.** The system has been fed. Four generated sources, loaded into three indexes,
+answering questions from one CLI with citations that resolve. `generate_corpus.py --seed 42`
+builds 12,000 claims across 9 regions, 10 policy wordings, 6 deliberately messy workbooks and
+72 image-only scans, validates them against each other, and writes a manifest that is
+byte-identical between runs. `load_corpus.py` walks them into Chroma and `sheets.*`.
+`ask.py` puts one question to all of it.
+
+**Evidence.** Two `--seed 42` runs, identical manifest. Offline suite **1440 passed**,
+`-m postgres` 55, `-m "ocr or docling"` 18, ruff clean. The read-only role still refuses DDL.
+Live, against the loaded corpus: the flagship question exits 0, verified and not degraded,
+with 3 citations resolved and 0 unresolved or malformed; a policy-only question invokes
+exactly one tool; an out-of-scope question refuses after two model calls and zero tool calls;
+a compliance question returns cell-level citations from a workbook.
+
+**Said plainly, because the acceptance deserves it.** The flagship answer cites three sources,
+not four. It asks for no target or compliance figure, so the router does not reach for the
+workbooks — and editing source descriptions until a fourth lit up would be tuning the system
+to its own benchmark. All four are demonstrated separately. The answer also states that the
+evidence does not establish *why* claims rose, while six scanned documents sat retrieved and
+uncited. That is a cross-source completeness gap, not a citation failure, and it is what
+C-11's scorers exist to measure.
+
+**What running it for real found.** Every defect below was invisible to a suite of 1348 tests
+because nothing had ever fed the system.
+
+- *Two manifests were necessary and not sufficient.* The known hazard was a shared manifest.
+  The real one was in the indexer: `_is_inconsistent` compared a manifest against the whole
+  collection, but policy and scanned share that collection, so each pass read the other's
+  documents as corruption and called `store.reset()`. Both passes reported success while the
+  collection only ever held whichever ran last.
+- *The observer rejected correct answers twice over.* `GROUPED_TERMS` matched the SQL keyword
+  "group by" and missed "grouped by", the form a model actually writes; and the arity check
+  read only `calculations` when the planner freely puts the grouping in `purpose`. Either way
+  a correct nine-region `GROUP BY` was called a scalar that returned too many rows, and the
+  repair loop spent its whole budget rewriting a query that was already right.
+- *The validator's first draft passed a corpus that was not there.* Every rule held vacuously
+  over an absent `data/scanned`, and "no findings" is exactly what a correct corpus looks like.
+- *A per-minute limit killed questions outright.* `max_rate_limit_wait_s` was 20s against a
+  tier allowing 10 calls a minute, for questions measured at 24 calls.
+- *The committed OCR fixtures had never been reproducible*, despite a plan that identified the
+  cause; the primitives were extracted and the fix they were extracted for was not applied.
+
+**Operational note.** `pytest -m postgres` drops every table in `sheets`, so it destroys the
+loaded spreadsheet corpus. Re-run `load_corpus.py` before a demo that follows a test run.
+
+**Decisions recorded, so they are not re-litigated.**
+
+- *The LLM context drafter stays unbuilt, deliberately.* The `contexts/` files are the contract,
+  and their hand-reviewed half — purpose, `cautions`, `invariants`, the join graph — is what
+  makes them trustworthy. An LLM-drafted `cautions` block nobody re-reads is the failure mode
+  the "no prompt names the corpus" rule exists to prevent. The half that benefits from
+  automation is already automated: `refresh_contexts.py` fills `value_set`, `sample_values` and
+  `stats` deterministically from the database.
+- *Eval goldens target 40*, the low end of C-11.4's range. A four-source question was measured
+  at 24 model calls, most of them on the tiers with a 250/day allowance; single-source questions
+  cost a fraction of that. 40 mixed cases fit in one to two days, which is what C-11.5's
+  resumability is for.
+- *`mid` moved to flash-lite*, decided from the trace rather than guessed. `mid` and `strong`
+  both pointed at flash, so one question's calls contended for a single 10/min pool while
+  flash-lite sat nearly idle — and flash-lite was already `mid`'s declared fallback.
+
+**Carried forward.** `SourceTool` passes only the sub-goal, so `understanding` never reaches the
+SQL path and entity grounding is skipped: a mention the database spells differently becomes a
+filter on a value it does not hold. It cannot be recovered from the sub-goal, and it must not be
+smuggled through mutable per-run state because the sources fan out concurrently. Widening the
+signature is a change to the graph's contract and belongs in its own card. Separately,
+`Provenance.trace_id` is `None` on all real evidence and `GraphState.trace_id` is written by
+nobody, so a trace cannot yet be reconciled against a finished answer.
+
+**Lessons.** LESSON-11 and LESSON-12 recorded — the shape of a defect that only appears when a
+component meets its real inputs, and writing the failing test first when the obvious version of
+it passes.
 
 ### Phase C-7 — closed
 
