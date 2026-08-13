@@ -37,6 +37,20 @@ REPORT_START = date(2026, 1, 1)
 REPORT_END = date(2026, 6, 30)
 CENT = Decimal("0.01")
 
+# Products span a five-fold range of coverage limits while claim severity is peril-led.
+# These reviewed ranges keep expected annual premium in the same order of magnitude
+# across products without abandoning the basis-point relationship to sum insured.
+_PREMIUM_BASIS_POINT_RANGES: Mapping[str, tuple[int, int]] = MappingProxyType(
+    {
+        "HSB": (850, 1_286),
+        "HSP": (468, 709),
+        "LLP": (226, 345),
+        "SPS": (162, 246),
+        "FIR": (212, 323),
+        "FLD": (269, 409),
+    }
+)
+
 
 @dataclass(frozen=True, slots=True)
 class CustomerRow:
@@ -113,12 +127,12 @@ class ClaimRate:
 # CLAIM_RATE_TABLE is keyed only by the complete (month, region_id, peril) key.
 _BASE_PERIL_RATES: Mapping[str, ClaimRate] = MappingProxyType(
     {
-        "water_damage": ClaimRate(25, Decimal("200000.00"), Decimal("1800000.00")),
-        "fire": ClaimRate(8, Decimal("500000.00"), Decimal("8000000.00")),
-        "theft": ClaimRate(15, Decimal("150000.00"), Decimal("2000000.00")),
-        "storm": ClaimRate(10, Decimal("200000.00"), Decimal("2500000.00")),
-        "impact": ClaimRate(12, Decimal("100000.00"), Decimal("1200000.00")),
-        "liability": ClaimRate(6, Decimal("100000.00"), Decimal("3000000.00")),
+        "water_damage": ClaimRate(25, Decimal("130000.00"), Decimal("160000.00")),
+        "fire": ClaimRate(8, Decimal("230000.00"), Decimal("270000.00")),
+        "theft": ClaimRate(15, Decimal("120000.00"), Decimal("150000.00")),
+        "storm": ClaimRate(10, Decimal("150000.00"), Decimal("180000.00")),
+        "impact": ClaimRate(12, Decimal("90000.00"), Decimal("110000.00")),
+        "liability": ClaimRate(6, Decimal("170000.00"), Decimal("200000.00")),
     }
 )
 
@@ -127,21 +141,21 @@ _BASE_PERIL_RATES: Mapping[str, ClaimRate] = MappingProxyType(
 PLANTED_RATE_ROWS: Mapping[tuple[int, int, str], ClaimRate] = MappingProxyType(
     {
         (3, 1, "water_damage"): ClaimRate(
-            75, Decimal("350000.00"), Decimal("2600000.00")
+            75, Decimal("180000.00"), Decimal("220000.00")
         ),
         (3, 2, "water_damage"): ClaimRate(
-            75, Decimal("350000.00"), Decimal("2600000.00")
+            75, Decimal("180000.00"), Decimal("220000.00")
         ),
         (3, 4, "water_damage"): ClaimRate(
-            75, Decimal("350000.00"), Decimal("2600000.00")
+            75, Decimal("180000.00"), Decimal("220000.00")
         ),
         (3, 5, "water_damage"): ClaimRate(
-            75, Decimal("350000.00"), Decimal("2600000.00")
+            75, Decimal("180000.00"), Decimal("220000.00")
         ),
-        (4, 3, "theft"): ClaimRate(55, Decimal("250000.00"), Decimal("2800000.00")),
-        (4, 6, "theft"): ClaimRate(55, Decimal("250000.00"), Decimal("2800000.00")),
-        (4, 7, "theft"): ClaimRate(55, Decimal("250000.00"), Decimal("2800000.00")),
-        (4, 9, "theft"): ClaimRate(55, Decimal("250000.00"), Decimal("2800000.00")),
+        (4, 3, "theft"): ClaimRate(55, Decimal("170000.00"), Decimal("210000.00")),
+        (4, 6, "theft"): ClaimRate(55, Decimal("170000.00"), Decimal("210000.00")),
+        (4, 7, "theft"): ClaimRate(55, Decimal("170000.00"), Decimal("210000.00")),
+        (4, 9, "theft"): ClaimRate(55, Decimal("170000.00"), Decimal("210000.00")),
     }
 )
 
@@ -539,7 +553,9 @@ def _generate_policies(
         )
         deductible_factor = Decimal(rng.choice((100, 125, 150))) / Decimal(100)
         deductible = _money(product.base_deductible_pkr * deductible_factor)
-        premium_basis_points = rng.randrange(45, 151)
+        premium_basis_points = rng.randrange(
+            *_PREMIUM_BASIS_POINT_RANGES[product.product_code]
+        )
         annual_premium = _money(
             sum_insured * Decimal(premium_basis_points) / Decimal(10_000)
         )

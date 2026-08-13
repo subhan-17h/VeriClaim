@@ -47,19 +47,19 @@ columns:
   type: bigint
   meaning: The policy the claim was made against.
   sample_values:
-  - '200002'
+  - '200001'
   - '200003'
-  - '200005'
   - '200006'
   - '200007'
   - '200008'
-  - '200009'
   - '200010'
+  - '200011'
+  - '200012'
   stats:
     total_count: 12000
-    distinct_count: 5190
+    distinct_count: 5195
     null_count: 0
-    minimum: '200002'
+    minimum: '200001'
     maximum: '206000'
 - name: adjuster_id
   type: integer
@@ -164,16 +164,16 @@ columns:
   meaning: The date the claim was closed. Null while the claim is open.
   sample_values:
   - '2026-01-02'
+  - '2026-01-03'
   - '2026-01-04'
   - '2026-01-05'
   - '2026-01-06'
   - '2026-01-07'
   - '2026-01-08'
   - '2026-01-09'
-  - '2026-01-10'
   stats:
     total_count: 12000
-    distinct_count: 224
+    distinct_count: 225
     null_count: 4800
     minimum: '2026-01-02'
     maximum: '2026-08-14'
@@ -223,18 +223,18 @@ columns:
   sample_values:
   - '0.00'
   - '10000.00'
-  - '1000499.97'
-  - '1000519.57'
-  - '1000568.02'
-  - '1000773.60'
-  - '1000835.17'
-  - '1000856.43'
+  - '100013.25'
+  - '100015.93'
+  - '100023.49'
+  - '100031.92'
+  - '100052.78'
+  - '100067.45'
   stats:
     total_count: 12000
-    distinct_count: 9578
+    distinct_count: 9361
     null_count: 0
     minimum: '0.00'
-    maximum: '7923229.03'
+    maximum: '244901.37'
 - name: paid_amount_pkr
   type: numeric
   meaning: Cash actually paid out on the claim so far. The right column for questions about money
@@ -243,18 +243,18 @@ columns:
   sample_values:
   - '0.00'
   - '10000.00'
-  - '1000856.43'
-  - '1001312.83'
-  - '1001594.36'
-  - '1001837.16'
-  - '1001939.63'
-  - '1002034.15'
+  - '10001.99'
+  - '100065.35'
+  - '100067.45'
+  - '100068.97'
+  - '100070.19'
+  - '100081.83'
   stats:
     total_count: 12000
-    distinct_count: 7193
+    distinct_count: 7049
     null_count: 0
     minimum: '0.00'
-    maximum: '7880361.84'
+    maximum: '243818.82'
 - name: reserve_amount_pkr
   type: numeric
   meaning: The amount still set aside to meet the remaining cost of the claim. Incurred is paid plus
@@ -263,18 +263,18 @@ columns:
   sample_values:
   - '0.00'
   - '10000.00'
-  - '1000031.89'
-  - '1000406.06'
-  - '1000499.97'
-  - '1000568.02'
-  - '1001445.24'
-  - '1002449.08'
+  - '100023.49'
+  - '100052.78'
+  - '100119.11'
+  - '100138.99'
+  - '100170.50'
+  - '100172.33'
   stats:
     total_count: 12000
-    distinct_count: 4793
+    distinct_count: 4728
     null_count: 0
     minimum: '0.00'
-    maximum: '7899861.38'
+    maximum: '244813.50'
 - name: deductible_applied_pkr
   type: numeric
   meaning: The deductible actually applied when settling this claim, taken from the policy terms.
@@ -282,19 +282,19 @@ columns:
   unit: PKR
   sample_values:
   - '0.00'
-  - '100000.00'
   - '112500.00'
-  - '125000.00'
-  - '150000.00'
   - '25000.00'
   - '31250.00'
   - '37500.00'
+  - '50000.00'
+  - '60000.00'
+  - '62500.00'
   stats:
     total_count: 12000
-    distinct_count: 12
+    distinct_count: 11
     null_count: 0
     minimum: '0.00'
-    maximum: '150000.00'
+    maximum: '112500.00'
 useful_for:
 - Counting claims reported in a period, by region, peril or product.
 - Measuring claim cost, either incurred or paid, by any of those groupings.

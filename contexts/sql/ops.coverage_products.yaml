@@ -93,16 +93,16 @@ columns:
     The amount actually applied to a given policy is ops.policies.deductible_pkr.
   unit: PKR
   sample_values:
-  - '100000'
   - '25000'
   - '50000'
+  - '60000'
   - '75000'
   stats:
     total_count: 6
     distinct_count: 4
     null_count: 0
     minimum: '25000'
-    maximum: '100000'
+    maximum: '75000'
 - name: coverage_limit_pkr
   type: numeric
   meaning: The maximum this product will pay for a single claim. A ceiling on the payout, not an amount

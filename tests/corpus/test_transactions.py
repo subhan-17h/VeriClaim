@@ -253,6 +253,47 @@ def test_deductibles_come_from_policies_and_limits_are_respected(
         policy = policy_by_id[claim.policy_id]
         assert claim.deductible_applied_pkr in {Decimal("0.00"), policy.deductible_pkr}
         assert claim.incurred_amount_pkr <= policy.sum_insured_pkr
+        if claim.status not in {"denied", "withdrawn"}:
+            assert claim.incurred_amount_pkr > Decimal("0.00")
+
+
+def test_six_month_loss_ratios_are_plausible_in_every_region_product_cell(
+    corpus: TransactionRows,
+) -> None:
+    policy_by_id = {policy.policy_id: policy for policy in corpus.policies}
+    annual_premium_by_cell: defaultdict[tuple[int, int], Decimal] = defaultdict(Decimal)
+    incurred_by_cell: defaultdict[tuple[int, int], Decimal] = defaultdict(Decimal)
+
+    for policy in corpus.policies:
+        annual_premium_by_cell[(policy.region_id, policy.product_id)] += (
+            policy.annual_premium_pkr
+        )
+    for claim in corpus.claims:
+        product_id = policy_by_id[claim.policy_id].product_id
+        incurred_by_cell[(claim.region_id, product_id)] += claim.incurred_amount_pkr
+
+    expected_cells = {
+        (region.region_id, product.product_id)
+        for region in REGIONS
+        for product in COVERAGE_PRODUCTS
+    }
+    assert set(annual_premium_by_cell) == expected_cells
+    assert set(incurred_by_cell) == expected_cells
+
+    earned_fraction = Decimal("0.5")
+    cell_ratios = {
+        cell: incurred_by_cell[cell] / (annual_premium * earned_fraction)
+        for cell, annual_premium in annual_premium_by_cell.items()
+    }
+    overall_ratio = sum(incurred_by_cell.values(), Decimal("0.00")) / (
+        sum(annual_premium_by_cell.values(), Decimal("0.00")) * earned_fraction
+    )
+
+    assert Decimal("0.5") <= overall_ratio <= Decimal("1.2")
+    assert all(
+        Decimal("0.5") <= ratio <= Decimal("1.2")
+        for ratio in cell_ratios.values()
+    )
 
 
 def test_payments_reconcile_exactly_to_claim_paid_amounts(
@@ -308,12 +349,41 @@ def test_planted_trends_are_reviewable_rate_rows_and_present_in_output(
         neighbour = CLAIM_RATE_TABLE[(neighbour_month, region_id, peril)]
         assert planted_rate.frequency_weight > neighbour.frequency_weight
         assert planted_rate.severity_max_pkr > neighbour.severity_max_pkr
+    assert all(
+        CLAIM_RATE_TABLE[(month, region.region_id, "fire")].severity_min_pkr
+        > CLAIM_RATE_TABLE[(month, region.region_id, "impact")].severity_max_pkr
+        for month in range(1, 7)
+        for region in REGIONS
+    )
 
     frequencies = Counter((claim.report_date.month, claim.peril) for claim in corpus.claims)
     assert frequencies[(3, "water_damage")] > frequencies[(2, "water_damage")]
     assert frequencies[(3, "water_damage")] > frequencies[(4, "water_damage")]
     assert frequencies[(4, "theft")] > frequencies[(3, "theft")]
     assert frequencies[(4, "theft")] > frequencies[(5, "theft")]
+
+    water_regions = {1, 2, 4, 5}
+    theft_regions = {3, 6, 7, 9}
+    march_water = Counter(
+        claim.region_id
+        for claim in corpus.claims
+        if claim.report_date.month == 3 and claim.peril == "water_damage"
+    )
+    april_theft = Counter(
+        claim.region_id
+        for claim in corpus.claims
+        if claim.report_date.month == 4 and claim.peril == "theft"
+    )
+    assert sum(march_water[region_id] for region_id in water_regions) > sum(
+        march_water[region.region_id]
+        for region in REGIONS
+        if region.region_id not in water_regions
+    )
+    assert sum(april_theft[region_id] for region_id in theft_regions) > sum(
+        april_theft[region.region_id]
+        for region in REGIONS
+        if region.region_id not in theft_regions
+    )
 
 
 def test_changing_one_rate_row_changes_generated_frequency() -> None:

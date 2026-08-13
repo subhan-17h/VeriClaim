@@ -85,7 +85,7 @@ COVERAGE_PRODUCTS: tuple[CoverageProduct, ...] = (
         "SPS",
         "SME Property Shield",
         "SME_Property_Shield_2026.pdf",
-        Decimal("100000"),
+        Decimal("60000"),
         Decimal("25000000"),
     ),
     CoverageProduct(
@@ -101,7 +101,7 @@ COVERAGE_PRODUCTS: tuple[CoverageProduct, ...] = (
         "FLD",
         "Flood Protection",
         "Flood_Protection_2026.pdf",
-        Decimal("100000"),
+        Decimal("60000"),
         Decimal("15000000"),
     ),
 )

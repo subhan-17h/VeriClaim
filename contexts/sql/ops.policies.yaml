@@ -152,57 +152,57 @@ columns:
   sample_values:
   - '10006000.00'
   - '10006500.00'
-  - '10012500.00'
+  - '10009500.00'
+  - '10011000.00'
   - '10014000.00'
   - '10015500.00'
   - '10022000.00'
   - '10024000.00'
-  - '10026000.00'
   stats:
     total_count: 6000
-    distinct_count: 5099
+    distinct_count: 5107
     null_count: 0
-    minimum: '2500000.00'
-    maximum: '24987500.00'
+    minimum: '2500500.00'
+    maximum: '24995000.00'
 - name: deductible_pkr
   type: numeric
   meaning: The amount the insured bears on each claim under this policy. Subtracted from a loss before
     the insurer pays. This is the policy-specific figure; the product default is ops.coverage_products.base_deductible_pkr.
   unit: PKR
   sample_values:
-  - '100000.00'
   - '112500.00'
-  - '125000.00'
-  - '150000.00'
   - '25000.00'
   - '31250.00'
   - '37500.00'
   - '50000.00'
+  - '60000.00'
+  - '62500.00'
+  - '75000.00'
   stats:
     total_count: 6000
-    distinct_count: 11
+    distinct_count: 10
     null_count: 0
     minimum: '25000.00'
-    maximum: '150000.00'
+    maximum: '112500.00'
 - name: annual_premium_pkr
   type: numeric
   meaning: The annual amount the customer pays for cover. Income, not exposure.
   unit: PKR
   sample_values:
-  - '100001.25'
-  - '100009.35'
-  - '100031.40'
-  - '100038.40'
-  - '100058.25'
-  - '100094.40'
-  - '100095.90'
-  - '100096.00'
+  - '172643.10'
+  - '175391.10'
+  - '176091.30'
+  - '180144.00'
+  - '180891.90'
+  - '180971.10'
+  - '181863.00'
+  - '183015.45'
   stats:
     total_count: 6000
-    distinct_count: 5963
+    distinct_count: 5976
     null_count: 0
-    minimum: '11534.50'
-    maximum: '364561.00'
+    minimum: '172643.10'
+    maximum: '691267.50'
 useful_for:
 - Counting policies in force, by product, region or period.
 - Finding the terms - sum insured, deductible - that apply to a claim.
