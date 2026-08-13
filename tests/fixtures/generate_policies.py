@@ -20,68 +20,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
+from vericlaim.corpus.pdf import render_policy_pdf
 
 OUTPUT_DIR = Path(__file__).parent / "policies"
-
-_BODY_FONT = ("Helvetica", 10)
-_HEADING_FONT = ("Helvetica-Bold", 11)
-_LEFT = 20 * mm
-_TOP = 272 * mm
-_LINE = 5.2 * mm
-_WIDTH = 78  # characters per line at 10pt Helvetica in the text column
-
-
-def _wrap(text: str, width: int = _WIDTH) -> list[str]:
-    """Wrap a paragraph to the text column, preserving deliberate blank lines."""
-    if not text:
-        return [""]
-    words = text.split()
-    lines: list[str] = []
-    current = ""
-    for word in words:
-        candidate = f"{current} {word}".strip()
-        if len(candidate) <= width:
-            current = candidate
-        else:
-            lines.append(current)
-            current = word
-    if current:
-        lines.append(current)
-    return lines
-
-
-def _render(path: Path, title: str, form_number: str, pages: list[list[str]]) -> None:
-    """Write one policy document, one page per element of ``pages``.
-
-    A line is treated as a heading when it is not indented and matches the
-    policy-form shapes the chunker recognises. Everything else is body text.
-    """
-    pdf = canvas.Canvas(str(path), pagesize=A4)
-    total = len(pages)
-
-    for page_number, blocks in enumerate(pages, start=1):
-        # Running header and page stamp -- the furniture the parser must strip.
-        pdf.setFont("Helvetica-Oblique", 8)
-        pdf.drawString(_LEFT, 285 * mm, f"{title} — Policy Wording {form_number}")
-        pdf.drawString(_LEFT, 12 * mm, f"Page {page_number} of {total}")
-        pdf.drawRightString(190 * mm, 12 * mm, "NorthStar Insurance Limited")
-
-        y = _TOP
-        for block in blocks:
-            is_heading = block.isupper() or block[:1].isdigit() or block.startswith("(")
-            font = _HEADING_FONT if is_heading else _BODY_FONT
-            pdf.setFont(*font)
-            for line in _wrap(block):
-                pdf.drawString(_LEFT, y, line)
-                y -= _LINE
-            y -= _LINE * 0.6
-
-        pdf.showPage()
-
-    pdf.save()
 
 
 HOMESECURE_PLUS = [
@@ -281,7 +222,7 @@ def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     for filename, (title, form_number, pages) in DOCUMENTS.items():
         path = OUTPUT_DIR / filename
-        _render(path, title, form_number, pages)
+        render_policy_pdf(path, title, form_number, pages)
         print(f"wrote {path.relative_to(Path(__file__).parents[2])} ({len(pages)} pages)")
 
 

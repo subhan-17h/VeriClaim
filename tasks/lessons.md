@@ -142,3 +142,17 @@ so each one needs an autouse fixture clearing it, beside `isolated_quota_state`,
 already exists for exactly this reason. Treat a test that behaves differently in a full run than
 alone as evidence of shared process state, and find the state before fixing the test —
 the isolation failure is usually the smaller half of what is wrong.
+
+---
+
+## LESSON-10 — Test the contract, not one convenient rendering of it
+
+**Pattern:** Corpus tests matched whole sentences and asserted that the only monetary values in a
+policy were its deductible and overall limit. The wording was then unnaturally capitalised and
+useful sub-limits were omitted to make those assertions pass.
+
+**Rule:** Tests over authored content assert semantic properties and distinguish the roles of
+figures. Check that the relevant clause contains the coverage and exclusion concepts, that base
+deductibles and overall limits agree with their source of truth, and that sub-limits do not exceed
+the overall limit. Do not freeze editorial prose or prohibit legitimate figures merely because a
+shorter assertion is easier to write.
