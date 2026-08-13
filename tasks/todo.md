@@ -196,7 +196,8 @@ column; the coercion reads the same amount whatever marks its currency; offline 
 
 - [x] **C-8.1** `ops` schema + ~12k claims Jan–Jun 2026 with real FKs and indexes. — `N`
 - [x] **C-8.2** 10–14 policy PDFs incl. the sudden-vs-gradual water clause. — `N`
-- [ ] **C-8.3** 6–8 deliberately messy `.xlsx`. — `N`
+- [x] **C-8.3** 6 deliberately messy `.xlsx` — exactly the six `contexts/sheets/` declares, since
+      every workbook needs a reviewed context and a test asserts the names agree. — `N`
 - [ ] **C-8.4** 60–80 image-only scanned PDFs keyed to real `claim_id`s, ~20% degraded. — `N`
 - [ ] **C-8.5** Cross-source consistency validator. — `N`
 
