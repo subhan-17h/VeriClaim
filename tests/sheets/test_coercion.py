@@ -57,6 +57,32 @@ def test_a_trailing_currency_code_is_stripped_too() -> None:
     assert value("250,000 PKR", "currency") == Decimal("250000")
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "PKR 250,000",
+        "250,000 PKR",
+        "Rs. 250,000",
+        "Rs 250,000",
+        "₨250,000",
+        "$250,000",
+        "USD 250,000",
+        "€250,000",
+        "£250,000",
+        "250,000",
+    ],
+)
+def test_the_amount_reads_the_same_whatever_marks_the_currency(raw: str) -> None:
+    """The corpus is PKR and this code does not know that.
+
+    The unit is declared once per column in the reviewed contexts, and nothing in the
+    parsing branches on it. A reader that understood only PKR would quietly fail every
+    other mark and drag the whole column to text, and a second currency would then be a
+    code change instead of a context-file one.
+    """
+    assert value(raw, "currency") == Decimal("250000")
+
+
 def test_an_amount_in_brackets_is_negative() -> None:
     """Accounting notation. Read as positive it flips the sign on a recovery, and the
     total comes out too high by twice the amount."""

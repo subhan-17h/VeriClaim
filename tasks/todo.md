@@ -187,7 +187,7 @@ them: prompts name no part of the corpus, and the corpus is PKR while the code i
       transcription prompt and `Evidence.label`. — `N`
 - [x] **C-7.12** Guard the three prompts the rule covers but no test did: `escalation.py`'s
       transcription prompt and `unit_tester.py`'s two. — `N`
-- [ ] **C-7.13** Prove the currency-agnosticism claim the invariant makes. — `N`
+- [x] **C-7.13** Prove the currency-agnosticism claim the invariant makes. — `N`
 
 **Acceptance:** every prompt constant in `src/` has a test asserting it names no corpus table or
 column; the coercion reads the same amount whatever marks its currency; offline suite green.
