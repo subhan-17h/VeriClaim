@@ -409,3 +409,94 @@ def test_the_zero_chunk_guard_still_covers_a_supplied_processor(
 
     with pytest.raises(ZeroChunkError, match="4 pages"):
         _index(corpus, store, embedder, manifest_path, processor=processor)
+
+
+# ----------------------------------------------------- two sources, one collection
+
+
+class TestASharedCollection:
+    """Policy wordings and scanned paperwork live in one collection, separated by
+    ``source_type`` metadata and each tracked by its own manifest.
+
+    Until C-8.6 the consistency check compared a manifest against the *whole*
+    collection, so each pass saw the other source's documents as corruption. The
+    consequence was not a slow re-index: the rebuild wiped the collection, so the two
+    passes deleted each other's chunks on every run while reporting success.
+    """
+
+    @pytest.fixture
+    def second_corpus(self, tmp_path: Path) -> Path:
+        docs = tmp_path / "other-docs"
+        docs.mkdir()
+        (docs / "report.txt").write_text("SECTION 1\nAn unrelated document.\n", encoding="utf-8")
+        return docs
+
+    def _both(self, corpus, second_corpus, store, embedder, tmp_path, **kwargs):
+        first = _index(corpus, store, embedder, tmp_path / "one.json", **kwargs)
+        second = _index(
+            second_corpus, store, embedder, tmp_path / "two.json",
+            source_type="scanned_pdf", **kwargs,
+        )
+        return first, second
+
+    def test_the_second_pass_keeps_the_first_pass_chunks(
+        self, corpus, second_corpus, store, embedder, tmp_path
+    ) -> None:
+        self._both(corpus, second_corpus, store, embedder, tmp_path)
+        stored = set(store.document_ids())
+
+        assert "wording.txt" in stored
+        assert "report.txt" in stored
+
+    def test_a_re_run_skips_every_document_in_both_sources(
+        self, corpus, second_corpus, store, embedder, tmp_path
+    ) -> None:
+        self._both(corpus, second_corpus, store, embedder, tmp_path)
+        first, second = self._both(corpus, second_corpus, store, embedder, tmp_path)
+
+        assert (first.added, first.updated, first.skipped) == (0, 0, 1)
+        assert (second.added, second.updated, second.skipped) == (0, 0, 1)
+        assert not first.changed and not second.changed
+
+    def test_each_pass_counts_only_its_own_chunks(
+        self, corpus, second_corpus, store, embedder, tmp_path
+    ) -> None:
+        """store.count() is the whole shared collection, which is not this pass's work."""
+        first, second = self._both(corpus, second_corpus, store, embedder, tmp_path)
+
+        assert first.chunks_created + second.chunks_created == store.count()
+        assert first.chunks_created > 0
+        assert second.chunks_created > 0
+
+    def test_forcing_one_source_leaves_the_other_intact(
+        self, corpus, second_corpus, store, embedder, tmp_path
+    ) -> None:
+        self._both(corpus, second_corpus, store, embedder, tmp_path)
+        _index(corpus, store, embedder, tmp_path / "one.json", force=True)
+
+        assert "report.txt" in set(store.document_ids())
+
+    def test_deleting_a_file_removes_only_its_chunks(
+        self, corpus, second_corpus, store, embedder, tmp_path
+    ) -> None:
+        self._both(corpus, second_corpus, store, embedder, tmp_path)
+        (second_corpus / "report.txt").unlink()
+
+        result = _index(
+            second_corpus, store, embedder, tmp_path / "two.json", source_type="scanned_pdf"
+        )
+
+        assert result.removed == 1
+        assert set(store.document_ids()) == {"wording.txt"}
+
+    def test_a_genuinely_missing_document_still_triggers_a_rebuild(
+        self, corpus, second_corpus, store, embedder, tmp_path
+    ) -> None:
+        """Scoping the check must not blind it to the case it exists for."""
+        self._both(corpus, second_corpus, store, embedder, tmp_path)
+        store.delete_document("wording.txt")
+
+        result = _index(corpus, store, embedder, tmp_path / "one.json")
+
+        assert result.added == 1
+        assert "report.txt" in set(store.document_ids())

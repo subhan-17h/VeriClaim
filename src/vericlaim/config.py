@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     chroma_dir: Path = PROJECT_ROOT / "chroma_db"
     bm25_dir: Path = PROJECT_ROOT / "bm25_index"
     manifest_path: Path = PROJECT_ROOT / "chroma_db" / "manifest.json"
+    # Policy and scanned documents share one Chroma collection, separated only by
+    # source_type -- but they must never share a manifest. index_corpus removes any
+    # document the manifest names and the directory does not hold, so a single manifest
+    # makes the second pass delete every chunk the first one wrote. Two paths, and the
+    # loader refuses to run if it is ever handed the same one twice.
+    policy_manifest_path: Path = PROJECT_ROOT / "chroma_db" / "manifest.policy.json"
+    scanned_manifest_path: Path = PROJECT_ROOT / "chroma_db" / "manifest.scanned.json"
     collection_name: str = "vericlaim"
 
     # --- Document parsing -------------------------------------------------

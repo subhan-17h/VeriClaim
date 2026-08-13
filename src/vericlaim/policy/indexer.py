@@ -134,8 +134,12 @@ def index_corpus(
 
     manifest = load_manifest(manifest_path)
     if force or _is_inconsistent(manifest, store):
-        report("Rebuilding the index from scratch")
-        store.reset()
+        report("Rebuilding this source's documents from scratch")
+        # Only this manifest's documents. The collection is shared between sources, so
+        # store.reset() here would delete the other source's chunks -- and it would do
+        # it while reporting a successful run.
+        for doc_id in manifest:
+            store.delete_document(doc_id)
         manifest = {}
 
     added = updated = skipped = 0
@@ -188,7 +192,10 @@ def index_corpus(
 
     return IndexResult(
         documents_indexed=len(manifest),
-        chunks_created=store.count(),
+        # This source's chunks, from the manifest that owns them -- not store.count(),
+        # which is the whole shared collection and would report the other source's
+        # chunks as this pass's work.
+        chunks_created=sum(record["chunk_count"] for record in manifest.values()),
         added=added,
         updated=updated,
         skipped=skipped,
@@ -236,10 +243,17 @@ def _is_inconsistent(manifest: dict[str, ManifestRecord], store: ChunkStore) -> 
     documents whose errors cancel out would otherwise pass. Documents recorded with
     zero chunks are excluded: they contribute no rows, so the collection cannot be
     expected to show them.
+
+    Scoped to the documents this manifest names. The collection is shared between
+    sources -- policy wordings and scanned paperwork live in it together, separated by
+    ``source_type`` metadata and each tracked by its own manifest -- so a document this
+    manifest does not name belongs to another pass and is not evidence that this one is
+    inconsistent. Comparing against the whole collection made every second run rebuild
+    from scratch, and made each pass delete the other's chunks on the way.
     """
-    expected = {
-        doc_id: record["chunk_count"]
+    counts = store.document_chunk_counts()
+    return any(
+        counts.get(doc_id, 0) != record["chunk_count"]
         for doc_id, record in manifest.items()
         if record["chunk_count"] > 0
-    }
-    return expected != store.document_chunk_counts()
+    )
