@@ -44,7 +44,16 @@ FOOTER_RE = re.compile(
 )
 PERCENT_TEXT_RE = re.compile(r"^\s*-?[\d,]+(\.\d+)?\s*%\s*$")
 NUMBER_TEXT_RE = re.compile(r"^\s*-?[\d,]+(\.\d+)?\s*$")
-CURRENCY_FORMAT_RE = re.compile(r"(pkr|rs\.?|usd|[$£€₨¥])", re.IGNORECASE)
+# The marks that decorate an amount without being part of it, written once and used
+# twice: the profiler matches them inside a cell's number format to call a column
+# currency, and the coercion strips them from the text of a value. Kept as one list
+# because the two copies had already drifted -- "inr" was in the coercion's and not the
+# profiler's, so a column formatted in that mark was classified as text while its values
+# were still parsed as money. The invariant is that the corpus is PKR and the code never
+# asks which currency a figure was written in; that only holds if both ends agree on
+# what a currency mark looks like.
+CURRENCY_TOKENS = r"pkr|rs\.?|usd|inr|[$£€₨¥]"
+CURRENCY_FORMAT_RE = re.compile(rf"({CURRENCY_TOKENS})", re.IGNORECASE)
 DATE_FORMAT_RE = re.compile(r"(yy|mm|dd|hh)", re.IGNORECASE)
 
 # A column is called what most of its values are. One stray word in a column of numbers is

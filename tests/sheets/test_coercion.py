@@ -188,3 +188,32 @@ def test_money_is_numeric_rather_than_floating_point() -> None:
     is exactly what the observer's sum invariant would then report as a contradiction."""
     assert postgres_type("currency") == "NUMERIC"
     assert isinstance(value("250,000.25", "currency"), Decimal)
+
+
+class TestTheCurrencyVocabulary:
+    """One list of currency marks, used by two different matchers.
+
+    The profiler reads a cell's *number format* to decide a column is currency; the
+    coercion strips the same marks from a value's *text*. They ask different questions
+    of different inputs, but the vocabulary is one vocabulary, and when it was written
+    twice the copies drifted: "inr" was in the coercion's and not the profiler's, so a
+    column marked in it was classified as text while its values still parsed as money.
+    """
+
+    MARKS = ("PKR", "Rs.", "Rs", "USD", "INR", "$", "£", "€", "₨", "¥")
+
+    @pytest.mark.parametrize("mark", MARKS)
+    def test_every_mark_is_recognised_in_a_number_format(self, mark: str) -> None:
+        from vericlaim.sheets.profiler import CURRENCY_FORMAT_RE
+
+        assert CURRENCY_FORMAT_RE.search(f'"{mark}"#,##0.00')
+
+    @pytest.mark.parametrize("mark", MARKS)
+    def test_every_mark_is_stripped_from_a_value(self, mark: str) -> None:
+        assert coerce(f"{mark} 1,234.50", "currency").value == Decimal("1234.50")
+
+    def test_an_amount_reads_the_same_whatever_marks_it(self) -> None:
+        """The corpus is PKR and the code is currency-agnostic; this is that, checked."""
+        amounts = {coerce(f"{mark} 1,234.50", "currency").value for mark in self.MARKS}
+
+        assert amounts == {Decimal("1234.50")}

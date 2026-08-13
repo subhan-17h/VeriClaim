@@ -29,10 +29,11 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from vericlaim.sheets.profiler import NULL_SENTINELS
+from vericlaim.sheets.profiler import CURRENCY_TOKENS, NULL_SENTINELS
 
-# Currency symbols and codes that decorate an amount without being part of it.
-CURRENCY_RE = re.compile(r"(pkr|rs\.?|usd|inr|[$£€₨¥])", re.IGNORECASE)
+# Currency symbols and codes that decorate an amount without being part of it. The
+# vocabulary lives beside the profiler's format matcher so the two cannot disagree.
+CURRENCY_RE = re.compile(rf"({CURRENCY_TOKENS})", re.IGNORECASE)
 BRACKETED_RE = re.compile(r"^\((?P<inner>.+)\)$")
 DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d", "%d %b %Y", "%d %B %Y")
 
