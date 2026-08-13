@@ -71,9 +71,13 @@ CLAIMS = SchemaContext(
 CONTEXTS = {CLAIMS.qualified: CLAIMS}
 
 
-def step(calculations: str = "COUNT(*) over all rows.") -> PlanStep:
+def step(
+    calculations: str = "COUNT(*) over all rows.",
+    *,
+    purpose: str = "Look at the rows.",
+) -> PlanStep:
     return PlanStep(
-        purpose="Look at the rows.",
+        purpose=purpose,
         table="ops.claims",
         tables=("ops.claims",),
         calculations=calculations,
@@ -206,6 +210,29 @@ def test_grouping_is_recognised_however_the_planner_conjugates_it(
     )
 
     assert observation.verdict == "ok", calculations
+
+
+def test_grouping_stated_in_the_purpose_counts_as_grouping() -> None:
+    """The planner splits its prose across two free-text fields as it sees fit.
+
+    Observed live: a step whose purpose read "the compliance rate for each region" put
+    only "compute the gap against target" in calculations. Judging arity from
+    calculations alone called a nine-region result a scalar and failed the step.
+    """
+    observation = observe(
+        result(
+            "SELECT region, rate FROM sheets.compliance",
+            ("region", "rate"),
+            ((1, 0.6), (2, 0.7), (3, 0.8)),
+        ),
+        step(
+            "Compute the sum of the gap between the reported rate and its target.",
+            purpose="Retrieve the inspection compliance rate for each region in Q1.",
+        ),
+        CONTEXTS,
+    )
+
+    assert observation.verdict == "ok"
 
 
 def test_a_superlative_may_return_every_tied_row() -> None:

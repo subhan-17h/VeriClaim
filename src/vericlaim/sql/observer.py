@@ -170,7 +170,11 @@ def _shape_verdict(result: ExecutionResult, step: PlanStep) -> Observation | Non
             "The result row width does not match the column count.",
         )
 
-    calculations = step.calculations.lower()
+    # Both free-text fields, because the planner splits its prose between them as it
+    # sees fit: a step whose purpose reads "the rate for each region" may leave only
+    # "compute the gap against target" in calculations, and reading one field alone
+    # then calls a per-region result a scalar that returned too many rows.
+    calculations = f"{step.purpose} {step.calculations}".lower()
 
     average_indexes = [
         index
