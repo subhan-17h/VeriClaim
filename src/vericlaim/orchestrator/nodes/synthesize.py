@@ -65,6 +65,10 @@ needs its id. Never write an id that is not in the supplied blocks, and never ci
 for something it does not say. If the evidence will not support a statement, do not write
 the statement.
 
+The ids heading the evidence blocks are the only citable things you are given. The other
+fields supplied alongside the question describe the run itself, not the records; they are
+context, and their names must never be written in brackets as though they were evidence.
+
 SEPARATE WHAT THE EVIDENCE STATES FROM WHAT IT SUGGESTS.
 State a fact plainly and cite it. Where you draw a conclusion the evidence supports but
 does not state, mark it as an inference in the sentence itself -- "this suggests", "this

@@ -32,9 +32,21 @@ from vericlaim.evidence import EvidenceSet
 #: worth silently accepting.
 CITATION_PATTERN = re.compile(r"\[E(\d+)\]")
 
-#: Matches anything bracket-and-E shaped, so malformed attempts can be reported
-#: rather than passing unnoticed as ordinary prose.
-_LOOSE_PATTERN = re.compile(r"\[\s*E[^\]]*\]", re.IGNORECASE)
+#: Matches a citation attempt that is not a valid marker, so it can be reported
+#: rather than passing unnoticed as ordinary prose. Two shapes qualify.
+#:
+#: Bracket-and-E covers the near-misses -- ``[E]``, ``[EX]``, ``[E-1]``.
+#:
+#: A single bracketed identifier covers a subtler one. The synthesis payload is a
+#: JSON object, so a model told to cite in brackets will bracket a *field* name --
+#: ``[known_gaps]`` -- as though the field were evidence. That marker resolves
+#: against nothing and is not E-shaped, so without this it reads to a human as a
+#: citation while being invisible to the checker: an answer that appears sourced
+#: and is not. Restricted to one identifier token, because a citation attempt is
+#: always one token and ordinary bracketed prose must not degrade a sound answer.
+_LOOSE_PATTERN = re.compile(
+    r"\[\s*(?:E[^\]]*|[A-Za-z_][A-Za-z0-9_]*)\s*\]", re.IGNORECASE
+)
 
 
 class UnresolvableCitationError(ValueError):

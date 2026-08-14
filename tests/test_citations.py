@@ -119,6 +119,24 @@ class TestResolution:
         assert report.ok is False
         assert report.malformed == ("[E]",)
 
+    @pytest.mark.parametrize("field", ["known_gaps", "unreachable_sources"])
+    def test_a_payload_field_cited_as_evidence_is_malformed(self, field):
+        """The synthesis payload is a JSON object, and a model handed a field called
+        ``known_gaps`` will bracket the field name as though it were an evidence id.
+        That marker resolves against nothing, so an answer carrying it reads as cited
+        while resting on nothing -- the exact confusion citations exist to prevent.
+        """
+        report = resolve_citations(f"Incomplete for that reason [{field}].", four_items())
+        assert report.malformed == (f"[{field}]",)
+        assert report.ok is False
+
+    def test_bracketed_prose_is_not_treated_as_a_citation_attempt(self):
+        # Bounds the check: a citation attempt is a single token, so ordinary
+        # bracketed prose must not be able to degrade an otherwise sound answer.
+        report = resolve_citations("Cover applies [see the schedule] here [E1].", four_items())
+        assert report.malformed == ()
+        assert report.resolved == ("E1",)
+
     def test_uncited_evidence_is_reported(self):
         # Retrieving from a source and then ignoring it is a real failure mode, so
         # cross-source completeness scoring needs this.

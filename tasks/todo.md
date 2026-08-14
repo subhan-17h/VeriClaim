@@ -299,6 +299,14 @@ visible.
             C-8.13 review section assumed it was.
       - [x] Fail a test on the pre-fix code, then guard the refusal and preserve the reason.
       - [x] Re-run live and record that the same conditions now answer with citations.
+- [x] **C-8.17** Make a citation the checker cannot see impossible: a bracketed payload
+      field name reads as a citation to a human and resolves against nothing, so an answer
+      could appear sourced while resting on nothing. Detect it, and stop the synthesizer
+      writing it. — `N`
+      - [x] Fail a test on `[known_gaps]` passing the malformed check unnoticed.
+      - [x] Widen the malformed check to a single bracketed identifier, bounded so ordinary
+            bracketed prose cannot degrade a sound answer.
+      - [x] Tell the synthesizer that only the evidence-block ids are citable.
 
 **Acceptance:** ten runs recorded and their differences named; a source tool receives the
 run's understanding; the flagship question resolves citations from all four sources.
@@ -1266,4 +1274,38 @@ though it were a citation id -- the model treated the payload's key name as a ci
 `\[E(\d+)\]` does not match it, so it is silently dropped rather than reported as malformed, and
 the answer reads as cited where it is not. Separately, `source.sql` failed with
 `Error tokenizing 'he adjuster's base region. Grouped by region name'` -- prose reaching the SQL
-tokenizer with its first character already lost. Both are recorded for their own cards.
+tokenizer with its first character already lost. Both are recorded for their own cards. The
+first became C-8.17; the second is still open.
+
+### C-8.17 - the citation the checker could not see
+
+**Why this outranked everything else open.** The answer read *"the answer is incomplete for that
+reason [known_gaps]"*. To a reader that is a cited sentence. To the checker it is prose: the
+loose pattern guarding malformed markers required an `E` immediately after the bracket, so a
+marker invented from a payload *field* name matched neither the strict pattern nor the loose one
+and was dropped in silence. An answer that appears sourced while resting on nothing is the exact
+failure the citation contract exists to prevent, and it was invisible to every guard in the
+system.
+
+**Caused by C-8.16, and worth stating plainly.** Passing the planner's reason into `known_gaps`
+made that field non-empty on far more runs, and the model began leaning on it. The defect was
+always latent -- any payload field could have been bracketed -- but C-8.16 is what made it fire.
+
+**Two halves, because either alone is insufficient.** Detection now treats a single bracketed
+identifier as a citation attempt, so a marker that resolves against nothing is reported rather
+than ignored. It is deliberately bounded to one token: a test pins that `[see the schedule]`
+stays ordinary prose, since a check that degraded sound answers would be its own defect.
+Generation is addressed too -- the prompt now says the evidence-block ids are the only citable
+things it is given, and that the fields describing the run are context whose names must never
+appear in brackets. Detection alone would only convert a silent lie into a loud failure; the
+prompt is what stops the failure happening.
+
+**Proof.** Two tests fail on the pre-fix checker; a third bounds it against false positives. The
+real answer that slipped through, replayed against the new checker, now yields
+`malformed == ('[known_gaps]',)`. Offline suite 1505 passed, 77 deselected; ruff clean. Live,
+two runs produced no bracketed field name at all, both verified and not degraded, and cited
+source coverage rose from two of four to three of four -- one run citing every source it held.
+
+**Still open.** A run holding evidence from all four sources cited three of them: eight
+scanned-document items went uncited. That is C-8.9's partial-citation finding, and it is now the
+last thing standing between this system and C-8.13's acceptance.
