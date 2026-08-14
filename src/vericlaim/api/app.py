@@ -21,6 +21,7 @@ from pydantic import BaseModel, field_validator
 from starlette.responses import StreamingResponse
 
 from vericlaim.api.protocol import Error, Event, Final
+from vericlaim.orchestrator.tools import open_tools
 
 PING: dict[str, Any] = {"event": "ping"}
 PING_INTERVAL_S = 10.0
@@ -43,7 +44,7 @@ class AskRequest(BaseModel):
 
 
 def _ndjson(payload: dict[str, Any]) -> str:
-    return json.dumps(payload, ensure_ascii=True) + "\n"
+    return json.dumps(payload, ensure_ascii=True, default=str) + "\n"
 
 
 def _default_run(question: str) -> Iterator[Event]:
@@ -58,7 +59,6 @@ def _default_run(question: str) -> Iterator[Event]:
     from vericlaim.gateway.core import Gateway
     from vericlaim.orchestrator.graph import build_graph, stream_question
     from vericlaim.orchestrator.sources import load_capabilities
-    from vericlaim.orchestrator.tools import open_tools
     from vericlaim.sql.db import default_database
 
     settings = get_settings()
@@ -73,16 +73,18 @@ def _default_run(question: str) -> Iterator[Event]:
         graph = build_graph(
             tools=tools.registry(), capabilities=capabilities, gateway=gateway
         )
-        yield from stream_question(graph, question, gateway=gateway)
+        yield from stream_question(
+            graph, question, gateway=gateway, config={"recursion_limit": 40}
+        )
 
 
 def _events(run: Callable[..., Iterator[Event]], question: str) -> Iterator[str]:
     """Serialize a run's events, emitting a keepalive whenever it goes quiet.
 
-    The run is driven on a worker thread so a silence -- the source fan-out is one of
-    about forty seconds -- can be distinguished from a finished stream. A dropped
-    connection and a crashed run look identical to a client, so a failure is reported as
-    an error event and a clean end rather than as a truncated response.
+    The run is driven on a worker thread because a run can go quiet for long enough that
+    silence is indistinguishable from a finished stream. A dropped connection and a
+    crashed run look identical to a client, so a failure is reported as an error event
+    and a clean end rather than as a truncated response.
     """
     channel: queue.Queue[Any] = queue.Queue()
 

@@ -80,7 +80,9 @@ def test_new_evidence_is_reported_as_it_arrives() -> None:
     events = list(stream_question(graph, "a question", gateway=FakeGateway()))
     evidence_events = [event for event in events if isinstance(event, EvidenceEvent)]
 
-    assert sum(len(event.items) for event in evidence_events) == 2
+    assert [
+        item["source_id"] for event in evidence_events for item in event.items
+    ] == ["one.pdf", "two.pdf"]
 
 
 def test_the_last_event_is_final_and_reports_the_ledger_cost() -> None:

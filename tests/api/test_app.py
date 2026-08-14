@@ -37,6 +37,52 @@ def _final(cost: float = 1.0) -> Final:
     return Final(payload={"answer": "an answer", "cost_usd": cost, "trace_id": "t1"})
 
 
+def test_default_run_injects_the_shared_database(monkeypatch) -> None:
+    import vericlaim.api.app as module
+
+    settings = object()
+    gateway = object()
+    database = object()
+    graph = object()
+    tool_kwargs: dict[str, Any] = {}
+    stream_kwargs: dict[str, Any] = {}
+
+    class ToolScope:
+        def __enter__(self) -> ToolScope:
+            return self
+
+        def __exit__(self, *args: Any) -> None:
+            return None
+
+        def registry(self) -> dict[str, Any]:
+            return {}
+
+    def fake_open_tools(**kwargs: Any) -> ToolScope:
+        tool_kwargs.update(kwargs)
+        return ToolScope()
+
+    def fake_stream_question(*args: Any, **kwargs: Any) -> Any:
+        stream_kwargs.update(kwargs)
+        return iter(())
+
+    monkeypatch.setattr(module, "open_tools", fake_open_tools)
+    monkeypatch.setattr("vericlaim.config.get_settings", lambda: settings)
+    monkeypatch.setattr("vericlaim.gateway.core.Gateway", lambda **kwargs: gateway)
+    monkeypatch.setattr("vericlaim.orchestrator.graph.build_graph", lambda **kwargs: graph)
+    monkeypatch.setattr(
+        "vericlaim.orchestrator.graph.stream_question", fake_stream_question
+    )
+    monkeypatch.setattr("vericlaim.orchestrator.sources.load_capabilities", lambda: {})
+    monkeypatch.setattr(
+        "vericlaim.sql.db.default_database", lambda **kwargs: database
+    )
+
+    list(module._default_run("q"))
+
+    assert tool_kwargs["database"] is database
+    assert stream_kwargs["config"] == {"recursion_limit": 40}
+
+
 def test_a_stream_ends_with_exactly_one_final() -> None:
     stub = StubRun([RunStarted(trace_id="t1", question="q"), _final()])
 
