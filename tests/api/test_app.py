@@ -1,0 +1,124 @@
+"""The endpoints are transport. They must not invent, drop or reorder a run's events."""
+
+from __future__ import annotations
+
+import json
+import threading
+from typing import Any
+
+from fastapi.testclient import TestClient
+
+from vericlaim.api.app import create_app
+from vericlaim.api.protocol import EVENT_NAMES, Final, RunStarted
+
+
+class StubRun:
+    """Stands in for stream_question: yields fixed events, or raises."""
+
+    def __init__(self, events: list[Any] | None = None, error: Exception | None = None):
+        self.events = events or []
+        self.error = error
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        yield from self.events
+        if self.error is not None:
+            raise self.error
+
+
+def _client(stub: StubRun) -> TestClient:
+    return TestClient(create_app(run=stub))
+
+
+def _lines(response: Any) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in response.text.splitlines() if line.strip()]
+
+
+def _final(cost: float = 1.0) -> Final:
+    return Final(payload={"answer": "an answer", "cost_usd": cost, "trace_id": "t1"})
+
+
+def test_a_stream_ends_with_exactly_one_final() -> None:
+    stub = StubRun([RunStarted(trace_id="t1", question="q"), _final()])
+
+    response = _client(stub).post("/api/ask/stream", json={"question": "q"})
+    events = _lines(response)
+
+    assert response.status_code == 200
+    assert [event["event"] for event in events] == ["run_started", "final"]
+
+
+def test_a_failure_mid_run_becomes_one_error_event_not_a_dropped_stream() -> None:
+    stub = StubRun([RunStarted(trace_id="t1", question="q")], error=RuntimeError("boom"))
+
+    events = _lines(_client(stub).post("/api/ask/stream", json={"question": "q"}))
+
+    assert [event["event"] for event in events] == ["run_started", "error"]
+    assert events[-1]["message"] == "boom"
+
+
+def test_every_streamed_event_name_is_in_the_protocol_or_is_the_keepalive() -> None:
+    stub = StubRun([RunStarted(trace_id="t1", question="q"), _final()])
+
+    events = _lines(_client(stub).post("/api/ask/stream", json={"question": "q"}))
+
+    for event in events:
+        assert event["event"] in EVENT_NAMES | {"ping"}
+
+
+def test_ask_returns_the_final_payload_as_one_object() -> None:
+    stub = StubRun([RunStarted(trace_id="t1", question="q"), _final(cost=42.0)])
+
+    response = _client(stub).post("/api/ask", json={"question": "q"})
+
+    assert response.status_code == 200
+    assert response.json()["cost_usd"] == 42.0
+    assert response.json()["answer"] == "an answer"
+
+
+def test_ask_reports_a_failed_run_rather_than_returning_an_answer() -> None:
+    stub = StubRun([RunStarted(trace_id="t1", question="q")], error=RuntimeError("boom"))
+
+    response = _client(stub).post("/api/ask", json={"question": "q"})
+
+    assert response.status_code == 500
+    assert "boom" in response.json()["detail"]
+
+
+def test_a_blank_question_is_refused() -> None:
+    stub = StubRun([_final()])
+
+    response = _client(stub).post("/api/ask", json={"question": "   "})
+
+    assert response.status_code == 422
+
+
+def test_both_routes_agree_on_the_same_run() -> None:
+    events = [RunStarted(trace_id="t1", question="q"), _final(cost=7.0)]
+
+    streamed = _lines(_client(StubRun(events)).post("/api/ask/stream", json={"question": "q"}))
+    awaited = _client(StubRun(events)).post("/api/ask", json={"question": "q"}).json()
+
+    final = next(event for event in streamed if event["event"] == "final")
+    assert final["answer"] == awaited["answer"]
+    assert final["cost_usd"] == awaited["cost_usd"]
+
+
+def test_the_keepalive_fires_while_a_run_is_quiet(monkeypatch) -> None:
+    import vericlaim.api.app as module
+
+    monkeypatch.setattr(module, "PING_INTERVAL_S", 0.01)
+    ready = threading.Event()
+
+    class SlowRun(StubRun):
+        def __call__(self, *args: Any, **kwargs: Any) -> Any:
+            yield RunStarted(trace_id="t1", question="q")
+            ready.wait(0.2)
+            yield _final()
+
+    events = _lines(_client(SlowRun()).post("/api/ask/stream", json={"question": "q"}))
+
+    assert any(event["event"] == "ping" for event in events)
+    assert [event["event"] for event in events if event["event"] != "ping"] == [
+        "run_started",
+        "final",
+    ]
