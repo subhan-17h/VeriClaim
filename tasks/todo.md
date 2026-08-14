@@ -348,9 +348,9 @@ a question for C-11.2's coverage scorer over 40-60 goldens, not for one question
       - [x] A chunk-safe NDJSON reader and a typed client that never surfaces a keepalive.
       - [x] The SPA mount, conditional on a build existing and registered after `/api`.
       - [x] A probe page, driven in a real browser against the running stack.
-- [ ] **C-10.2** Chat shell, streaming answer, history. — `V` CSRS
+- [x] **C-10.2** Chat shell, streaming answer, history, on the CSRS design system. — `V` CSRS
 - [ ] **C-10.3** Live agent trace rail. — `V` CSRS + unibot reducers
-- [ ] **C-10.4** Evidence cards, one renderer per source type. — `A` CSRS + `N`
+- [x] **C-10.4** Evidence cards, one renderer per source type. — `A` CSRS + `N`
 - [ ] **C-10.5** Source browser with page deep-linking. — `A` CSRS
 - [ ] **C-10.6** Query metadata panel (models, tokens, cost, latency, fallbacks). — `N`
 - [ ] **C-10.7** Evaluation view. — `N`
@@ -1476,3 +1476,54 @@ without breaking a generated client.
 not work: a composite referenced project may not disable emit, and the usual workaround
 emits declaration files nothing consumes. One config that also type-checks `vite.config.ts`
 replaces it.
+
+### C-10.2 and C-10.4 - the interface, and what the browser caught
+
+**Why these shipped together.** An answer showing `[E1]` markers with nothing behind
+them is not a finished screen, and citations are this product's thesis. Splitting them
+would have shipped a screen that misrepresents the system.
+
+**Copied, not imitated.** The seven OFL faces and the first 1363 lines of CSRS's
+stylesheet: both theme token blocks, shell, sidebar, thread, message, composer. The tail
+is its Data Viewer, which this project has no equivalent of, so it was never copied
+rather than copied and deleted. The markup follows the stylesheet it inherited --
+`.hideable` spans so labels glide out with the rail, the brand mark doubling as the
+expand control when collapsed, the two-button theme toggle whose active side carries
+`.on` -- because markup invented beside a stylesheet is how a design system stops
+looking like itself.
+
+**The one structural difference from the reference.** CSRS streams tokens and waits
+behind a typing dot. This stream is stage-level, so waiting renders the real pipeline:
+`Reading the question`, `Choosing sources`, `Querying the claims database`, each with its
+elapsed time, and a failed stage shown as failed rather than hidden. That is C-10.3's
+trace rail arriving early because the data was already on the wire.
+
+**Evidence, one renderer per source type.** Policy shows document, page and clause; the
+claims database shows the executed SQL in Geist Mono beside the number it produced; a
+spreadsheet shows workbook, sheet, row and A1 range; a scan shows its OCR confidence bar
+and whether the vision tier re-read it. Each group's tab reports `cited/total`, so
+evidence gathered and then ignored is visible rather than implied -- the live run showed
+`Operational spreadsheets 0/9`, which is exactly the kind of thing a demo usually hides.
+
+**Citations are the connective tissue.** An `[En]` marker is a chip that scrolls its card
+into view and flashes it. The pattern mirrors `CITATION_PATTERN`, leading-zero
+normalisation included, and a marker naming evidence that does not exist renders in an
+error style rather than vanishing.
+
+**Three defects the browser found that no unit test would have.** Icons carried no
+default size, so an unsized SVG rendered at its intrinsic size and swallowed the label
+beside it. An evidence card stretched to fit one long line of SQL and pushed the page
+wider than the viewport, because a grid child defaults to `min-width: auto` and the inner
+`overflow-x` never engaged. And the card head printed the backend's citation string beside
+a renderer already showing the same provenance. All three are invisible to a passing test
+suite and obvious on sight, which is why the acceptance step is a browser and not a
+snapshot.
+
+**Live evidence.** The four-source question ran in 12.2s over 20 steps with one failed
+source, produced a three-paragraph cited answer, and rendered all four evidence groups
+with the correct renderer for each. History survived a hard reload. Both themes render.
+The failed spreadsheet source was reported in full rather than quietly dropped.
+
+**Pruned on evidence.** 183 CSS rules removed, 1492 lines to 854, by grepping the
+components once they all existed rather than guessing beforehand. A check confirmed every
+class the components use survived.
