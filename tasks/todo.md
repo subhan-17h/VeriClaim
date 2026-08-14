@@ -341,7 +341,13 @@ a question for C-11.2's coverage scorer over 40-60 goldens, not for one question
 
 ## Phase C-10 — Frontend
 
-- [ ] **C-10.1** Vite + React 18 + TS scaffold, NDJSON client, typed event unions. — `V` CSRS
+- [x] **C-10.1** Vite + React 18 + TS scaffold, NDJSON client, typed event unions, and the
+      SPA mount deferred from C-9.2. — `V` CSRS
+      - [x] Scaffold adapted from CSRS, plus Vitest, which CSRS does not ship.
+      - [x] `types.ts` mirroring `protocol.py`, guarded by a Python parity test.
+      - [x] A chunk-safe NDJSON reader and a typed client that never surfaces a keepalive.
+      - [x] The SPA mount, conditional on a build existing and registered after `/api`.
+      - [x] A probe page, driven in a real browser against the running stack.
 - [ ] **C-10.2** Chat shell, streaming answer, history. — `V` CSRS
 - [ ] **C-10.3** Live agent trace rail. — `V` CSRS + unibot reducers
 - [ ] **C-10.4** Evidence cards, one renderer per source type. — `A` CSRS + `N`
@@ -1422,3 +1428,51 @@ remains the better end state, and belongs with C-10.6 where a panel would consum
 
 Offline suite 1509 passed, 77 deselected; ruff clean. Live, `--json` now carries a
 ledger-sourced `cost_usd` and the API's final event is unchanged.
+
+### C-10.1 - the pipe, and nothing but the pipe
+
+**What shipped, and what deliberately did not.** A Vite/React/TypeScript project, the wire
+contract, a chunk-safe NDJSON reader, a typed client, and the SPA mount that had been
+waiting since C-9.2 for a `dist` to serve. No UI: the page sends one question and prints
+the events, because C-10.2 builds the shell and a placeholder shell would only be thrown
+away. What this card establishes is that the whole path works.
+
+**Adapted, not invented.** The scaffold and the reader come from `CSRS/frontend`, whose
+buffering, trailing-line flush and abort handling are correct; rewriting them would have
+been the more impressive-looking and worse decision. Vitest is the one addition CSRS does
+not have, because the reader is where silent bugs live: a frame split mid-token, a last
+line with no newline, a blank line. Those are the tests.
+
+**The keepalive stays invisible, and that took a rule in two places.** `ping` appears in
+neither `EVENT_NAMES` nor `types.ts`, and the client drops it before a frame reaches typed
+code, so `Event` cannot contain one. A client that surfaced pings would be showing the
+reader the network rather than the run. Proven live rather than by assertion: the browser
+run sat quiet for over a minute while the free-tier limiter throttled, so keepalives fired
+repeatedly at the ten-second interval, and not one reached the rendered list.
+
+**An unknown event is ignored rather than fatal.** Otherwise every future addition to the
+protocol is a breaking change for an older client.
+
+**The mount fails safe.** `StaticFiles` raises on a missing directory, so an unconditional
+mount would stop the API importing in any checkout that has never run `npm run build` --
+including every machine without Node. It is therefore conditional on
+`frontend/dist/index.html`, and registered after every `/api` route so a catch-all at `/`
+cannot swallow them. Both are tested, and the offline suite was run twice, once with
+`frontend/dist` present and once with it moved away: **1514 passed** both times.
+
+**Drift is guarded from the Python side.** A pytest reads `types.ts`, extracts its event
+literals and asserts set-equality with `EVENT_NAMES`. It runs on every `uv run pytest` with
+no Node installed, and fails the moment either side gains an event the other lacks. It
+checks names only; field-level parity would be a schema generator wearing a test's clothes.
+
+**Live evidence.** Against the running stack the browser rendered the full lifecycle --
+`run_started`, ten stages, five `evidence` events, two `synthesize` stages where
+verification regenerated once, `verify`, and exactly one `final` reporting two resolved
+citations and `verified: true`. The five separate single-item `evidence` events are C-9.6's
+decision visible in practice: keeping `items` an array is what lets a later card batch them
+without breaking a generated client.
+
+**One plan correction, made during execution.** The planned split `tsconfig.node.json` could
+not work: a composite referenced project may not disable emit, and the usual workaround
+emits declaration files nothing consumes. One config that also type-checks `vite.config.ts`
+replaces it.
