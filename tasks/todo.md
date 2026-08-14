@@ -1032,3 +1032,40 @@ source that returned evidence producing no gap, and the hint still being the gap
 **One thing left plain rather than tidied.** The two branches build their shared details with
 duplicated lines. A helper would collapse them; it was not worth another round to save ten lines
 in a function that reads clearly as it stands.
+
+### C-8.13 - four live flagship runs, and why the card stays open
+
+The entry-point half is done (commit 7f07edd). The live half is **not met**, and the card stays
+unticked. Four runs were made against a freshly rebuilt corpus; all four are recorded here,
+including the ones that failed, because a card closed on the best of four runs would be a lie.
+
+| # | After | Sources cited | Exit | Verified | Evidence | Citations |
+|---|-------|---------------|------|----------|----------|-----------|
+| 1 | C-8.10 | 2 of 4 | 0 | yes, not degraded | 16 | 5 resolved |
+| 2 | C-8.14 | 3 of 4 | 0 | yes, not degraded | 19 | 8 resolved |
+| 3 | C-8.15 | 4 of 4 retrieved | 1 | no, degraded | 16 | **0 resolved** |
+| 4 | C-8.15 | 4 of 4 retrieved | 1 | no, degraded | 27 | **0 resolved** |
+
+**The two fixes did what they were written to do.** C-8.14 restored the claims database, which an
+out-of-clause ambiguity had been aborting. C-8.15 got the workbook source asked something it can
+answer -- run 3 returned one row from it, run 4 returned nine. Every source now reaches the
+evidence set.
+
+**A new blocker, measured rather than guessed.** On both four-source runs the synthesizer
+produced an answer carrying **no citation markers at all**, the verifier rejected it, a corrected
+attempt carried none either, and the run refused. That refusal is the citation contract working:
+uncited text was withheld rather than presented as fact, and `scripts/ask.py` exited non-zero.
+
+**This is not the C-8.9 finding.** That one measured *partial* citation -- 10-16 of 15-19
+evidence items uncited, with the rest cited. This is zero of 16 and zero of 27. The distinguishing
+variable across all four runs is the size of the evidence set: the two runs that synthesized
+cleanly saw 16 and 19 items with three sources or fewer, and the two that produced nothing
+citable saw a full four-source set. Two runs are not a rate, and this is recorded as a direction
+to investigate, not an established cause.
+
+**Deliberately not fixed here.** Fixing synthesis would be a third unplanned card in one session,
+and the uncited-evidence question already belongs to C-11.2's completeness scorer, where 40-60
+goldens will say far more than four runs of one question. C-8.13 stays open against that work.
+
+**Cost across all four runs: $0.000000.** Lifetime spend is unchanged at $0.000004 of the $0.50
+ceiling; free-tier usage ended the day at 30/250 flash and 35/1000 flash-lite.
