@@ -84,9 +84,12 @@ export function EvidenceCards({
                   id={`evidence-${item.id}`}
                   key={item.id}
                 >
+                  {/* The head carries the id and whether the answer used it. The
+                      provenance line belongs to the renderer, which knows what this
+                      source's locator actually means -- printing the backend's
+                      citation string here too would say the same thing twice. */}
                   <div className="ev-head">
                     <span className="ev-id">[{item.id}]</span>
-                    <span className="ev-citation">{item.citation}</span>
                     {!cited.has(item.id) && (
                       <span className="ev-uncited">not cited</span>
                     )}

@@ -1,19 +1,22 @@
 import type { SVGProps } from "react";
 
-type P = { className?: string };
-
+// Icons carry their own default size. An SVG with no width renders at its intrinsic
+// size, which in a flex row means it swallows the label beside it -- so the default
+// is set here rather than left to each call site to remember.
 const S = (d: string) =>
-  function Icon(p: P) {
+  function Icon({ width = 16, height = 16, ...props }: SVGProps<SVGSVGElement>) {
     return (
       <svg
-        className={p.className}
         viewBox="0 0 24 24"
+        width={width}
+        height={height}
         fill="none"
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden="true"
+        {...props}
       >
         <path d={d} />
       </svg>

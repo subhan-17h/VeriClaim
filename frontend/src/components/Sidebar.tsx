@@ -49,7 +49,7 @@ export function Sidebar({
             title="Collapse"
             aria-label="Collapse sidebar"
           >
-            <Ico.Panel />
+            <Ico.Panel width={17} height={17} />
           </button>
         )}
       </div>
@@ -108,7 +108,7 @@ export function Sidebar({
             onClick={() => onTheme("dark")}
             aria-pressed={theme === "dark"}
           >
-            <Ico.Moon />
+            <Ico.Moon width={14} height={14} />
             <span className="hideable">Dark</span>
           </button>
           <button
@@ -117,7 +117,7 @@ export function Sidebar({
             onClick={() => onTheme("light")}
             aria-pressed={theme === "light"}
           >
-            <Ico.Sun />
+            <Ico.Sun width={14} height={14} />
             <span className="hideable">Light</span>
           </button>
         </div>
