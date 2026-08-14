@@ -1417,3 +1417,59 @@ table.data td.key { color: var(--text); font-weight: 500; font-family: 'Geist Mo
   border-color: rgba(248, 113, 113, 0.28);
 }
 .verdict.unchecked { color: var(--text-2); background: var(--soft); }
+
+/* ============================================================
+   Evidence: grouped by source, one renderer per source type
+   ============================================================ */
+.evidence { margin-top: 10px; }
+.evidence-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.evidence-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--border-muted); border-radius: 999px;
+  padding: 6px 12px; font: inherit; font-size: 12.5px; cursor: pointer;
+  transition: border-color .18s var(--ease), color .18s var(--ease), background .18s var(--ease);
+}
+.evidence-tab:hover { color: var(--text); border-color: var(--border); }
+.evidence-tab.active { color: var(--text); border-color: var(--cyan-ring); background: var(--cyan-soft); }
+.evidence-tab svg { width: 14px; height: 14px; }
+.evidence-count {
+  color: var(--text-muted);
+  font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px;
+}
+.evidence-panel { display: grid; gap: 8px; margin-top: 10px; }
+.ev-card {
+  border: 1px solid var(--border-muted); background: var(--surface);
+  border-radius: var(--r-md); padding: 12px 14px;
+  transition: border-color .3s var(--ease), box-shadow .3s var(--ease);
+}
+.ev-card.cited { border-color: var(--border); }
+.ev-card.flash { border-color: var(--cyan); box-shadow: 0 0 0 3px var(--cyan-soft); }
+.ev-head { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 7px; }
+.ev-id { font-family: 'Geist Mono', ui-monospace, monospace; font-size: 12px; color: var(--cyan); }
+.ev-citation { color: var(--text-2); font-size: 12.5px; }
+.ev-uncited {
+  color: var(--text-muted); font-size: 11px;
+  border: 1px solid var(--border-muted); border-radius: 999px; padding: 1px 7px;
+}
+.ev-meta {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  color: var(--text-muted); font-size: 11.5px; margin-bottom: 6px;
+}
+.ev-strong { color: var(--text-2); }
+.ev-text {
+  color: var(--text); font-size: 13px; line-height: 1.65; margin: 0;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.ev-sql {
+  margin: 8px 0 0; padding: 10px 12px; overflow-x: auto;
+  background: var(--bg); border: 1px solid var(--border-muted); border-radius: var(--r-sm);
+  font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11.5px; line-height: 1.6;
+  color: var(--text-2);
+}
+.ev-score {
+  display: flex; align-items: center; gap: 9px; margin-bottom: 7px;
+  font-size: 11.5px; color: var(--text-muted);
+}
+.ev-score .hbar-track { flex: 1; max-width: 160px; }
+.ev-score-value { font-family: 'Geist Mono', ui-monospace, monospace; color: var(--text-2); }
