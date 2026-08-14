@@ -15,6 +15,7 @@ import pytest
 
 from vericlaim.config import Settings
 from vericlaim.evidence import SOURCE_TYPES
+from vericlaim.orchestrator.graph import SourceRequest
 from vericlaim.orchestrator.sources import load_capabilities
 from vericlaim.orchestrator.tools import (
     SourceTools,
@@ -60,11 +61,12 @@ class TestTheRegistry:
         """A source described but not wired fails mid-run, after the models are paid."""
         assert set(tools.registry()) == set(load_capabilities())
 
-    def test_every_tool_takes_only_the_sub_goal(self, tools: SourceTools) -> None:
+    def test_every_tool_takes_one_source_request(self, tools: SourceTools) -> None:
         for name, tool in tools.registry().items():
-            parameters = list(inspect.signature(tool).parameters.values())
+            parameters = list(inspect.signature(tool, eval_str=True).parameters.values())
             assert len(parameters) == 1, name
             assert parameters[0].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD, name
+            assert parameters[0].annotation is SourceRequest, name
 
     def test_two_registries_share_no_tool_objects(
         self, settings: Settings, store: ChunkStore, embedder
@@ -172,10 +174,30 @@ class TestClaimScoping:
             return []
 
         monkeypatch.setattr(tools.scanned, "search", record)
-        tools.search_scanned("the inspection report on CLM-1207")
+        tools.search_scanned(SourceRequest(goal="the inspection report on CLM-1207"))
 
         assert seen["claim_id"] == "CLM-1207"
         assert seen["query"] == "the inspection report on CLM-1207"
+
+
+def test_the_sql_adapter_carries_understanding_to_entity_resolution(
+    tools: SourceTools, monkeypatch
+) -> None:
+    understanding = {"entities": ["water damage"]}
+    seen: dict[str, object] = {}
+
+    def record(candidate: object, catalog: object) -> None:
+        seen.update(candidate=candidate, catalog=catalog)
+        raise RuntimeError("entity resolution reached")
+
+    monkeypatch.setattr("vericlaim.sql.tool.resolve_entities", record)
+
+    with pytest.raises(RuntimeError, match="entity resolution reached"):
+        tools.query_claims(
+            SourceRequest(goal="Count the matching records.", understanding=understanding)
+        )
+
+    assert seen == {"candidate": understanding, "catalog": tools.claims.catalog}
 
 
 def test_the_module_holds_no_mutable_state() -> None:

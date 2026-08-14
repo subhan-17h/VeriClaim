@@ -13,9 +13,10 @@ Everything else here is wiring, and deliberately thin:
   module translates each into the update the framework wants -- the fields that actually
   changed, and the stages and evidence that were *added* rather than the totals -- so the
   reducers do the merging and no node has to know it is running beside a sibling.
-* **The tools are injected.** Each source is a callable taking its sub-goal and returning
-  evidence. That is the whole contract: the graph never learns that one of them talks to
-  Postgres and another to an OCR index, and tests drive real fan-out behaviour with fakes.
+* **The tools are injected.** Each source is a callable taking one frozen, per-call
+  request with its sub-goal, the run's understanding and its trace id, and returning
+  evidence. The graph never learns that one talks to Postgres and another to an OCR
+  index, and tests drive real fan-out behaviour with fakes.
 * **Nothing fans out that was not decided.** The conditional edge is built from the
   routing decision and the plan's sub-goals, so a source reaches its tool only if the
   router chose it and the planner gave it something to ask. A question turned away, one
@@ -31,7 +32,9 @@ has to be told about, and :attr:`GraphState.failures` is what tells them.
 from __future__ import annotations
 
 import functools
+import uuid
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
@@ -59,9 +62,25 @@ from vericlaim.tracing import (
 # more obvious colon because the graph reserves ':' inside node names.
 SOURCE_STAGE_PREFIX = "source."
 
-# A tool takes the sub-goal written for its source and returns evidence. Nothing else
-# crosses this boundary: not the raw question, not the state, not raw tool output.
-SourceTool = Callable[[str], Sequence[Evidence]]
+
+@dataclass(frozen=True, slots=True)
+class SourceRequest:
+    """Everything one source needs for one branch call.
+
+    The four sources fan out concurrently as branches of one LangGraph superstep. A
+    mutable per-run channel between the graph and its tools would therefore be a race;
+    a frozen value constructed at call time gives every branch its own complete request
+    instead.
+    """
+
+    goal: str
+    understanding: Mapping[str, Any] | None = None
+    trace_id: str | None = None
+
+
+# Evidence is still the only thing that crosses back over the tool boundary. The graph
+# never admits raw source output into synthesis.
+SourceTool = Callable[[SourceRequest], Sequence[Evidence]]
 
 Node = Callable[..., GraphState]
 
@@ -148,7 +167,7 @@ def run_question(graph: Any, question: str, **config: Any) -> GraphState:
     """
     # Constructed rather than passed as a dict so a blank question fails here, before a
     # model is called, with the same error every other entry point gives.
-    start = GraphState(question=question)
+    start = GraphState(question=question, trace_id=uuid.uuid4().hex)
     state = GraphState(**graph.invoke(start, **config))
     _trace_run(state)
     return state
@@ -161,6 +180,7 @@ def _trace_run(state: GraphState) -> None:
     whether the answer was checked, and whether the graph went round again.
     """
     add_run_metadata(
+        vc_trace_id=state.trace_id,
         vc_sources_routed=list(state.routing.sources) if state.routing else [],
         vc_sources_used=list(state.sources_used),
         vc_evidence=len(state.evidence.items),
@@ -297,8 +317,13 @@ def _source_node(
                 "planned for but could not be called",
             )
 
+        request = SourceRequest(
+            goal=goal,
+            understanding=state.understanding or None,
+            trace_id=state.trace_id or None,
+        )
         try:
-            returned = tool(goal)
+            returned = tool(request)
         except Exception as exc:  # noqa: BLE001 - one source down is a gap, not the end
             return _failed(stage_name, f"{exc}")
 

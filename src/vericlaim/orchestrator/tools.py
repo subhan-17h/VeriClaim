@@ -1,8 +1,9 @@
 """The four real source tools, over one store, one embedder and one pool.
 
 ``build_graph`` takes its tools injected and, until this module, only fakes had ever
-been passed. What it needs is narrow -- ``Callable[[str], Sequence[Evidence]]``, keyed
-by source name -- and all four entry points already have that shape.
+been passed. What it needs is narrow -- one per-call source request in and a sequence of
+evidence out, keyed by source name -- and these adapters give all four entry points that
+shape.
 
 The work is in sharing dependencies. Each source also has a settings-driven module
 function (``search_policy``, ``query_claims_db``, and so on) that builds its own chunk
@@ -24,7 +25,7 @@ from typing import Any
 
 from vericlaim.config import Settings, get_settings
 from vericlaim.evidence import SOURCE_TYPES, Evidence
-from vericlaim.orchestrator.graph import SourceTool
+from vericlaim.orchestrator.graph import SourceRequest, SourceTool
 from vericlaim.policy.embeddings import Embedder, OllamaEmbedder
 from vericlaim.policy.store import ChunkStore
 from vericlaim.policy.tool import PolicySearcher
@@ -87,32 +88,35 @@ class SourceTools:
         return registry
 
     # -- the adapters -----------------------------------------------------
-    #
-    # A tool receives the sub-goal and nothing else. Two keyword arguments therefore
-    # cannot be passed through, and each is dropped deliberately:
-    #
-    # ``tables`` is left unset, which selects every documented table -- exactly the
-    # set the catalog was built over, so nothing is lost.
-    #
-    # ``understanding`` is a real loss, and is recorded in the phase review rather
-    # than hidden here. Without it the SQL path skips entity grounding, so a mention
-    # the database spells differently becomes a filter on a value it does not hold.
-    # It cannot be recovered from the sub-goal, because extraction is the understand
-    # node's own model call, and it must not be smuggled through mutable per-run
-    # state: the sources fan out concurrently and that would be a race. Widening the
-    # SourceTool signature is the fix, and it is a change to the graph's contract.
+    # ``tables`` stays unset deliberately: that selects every documented table, exactly
+    # the set each catalogue was built over.
 
-    def search_policy(self, goal: str) -> Sequence[Evidence]:
-        return self.policy.search(goal)
+    def search_policy(self, request: SourceRequest) -> Sequence[Evidence]:
+        return self.policy.search(request.goal, trace_id=request.trace_id)
 
-    def search_scanned(self, goal: str) -> Sequence[Evidence]:
-        return self.scanned.search(goal, claim_id=claim_reference(goal, self.settings))
+    def search_scanned(self, request: SourceRequest) -> Sequence[Evidence]:
+        return self.scanned.search(
+            request.goal,
+            claim_id=claim_reference(request.goal, self.settings),
+            trace_id=request.trace_id,
+        )
 
-    def query_claims(self, goal: str) -> Sequence[Evidence]:
-        return self.claims.query(goal)
+    def query_claims(self, request: SourceRequest) -> Sequence[Evidence]:
+        return self.claims.query(
+            request.goal,
+            understanding=request.understanding,
+            trace_id=request.trace_id,
+        )
 
-    def query_spreadsheets(self, goal: str) -> Sequence[Evidence]:
-        return self.spreadsheets.query(goal)
+    def query_spreadsheets(self, request: SourceRequest) -> Sequence[Evidence]:
+        # The shared grounding machinery now runs against the workbook catalogue too. A
+        # mention that is clear in claims data may be ambiguous there; refusing that source
+        # as an evidence gap is the resolver working as designed.
+        return self.spreadsheets.query(
+            request.goal,
+            understanding=request.understanding,
+            trace_id=request.trace_id,
+        )
 
     # -- lifecycle --------------------------------------------------------
 

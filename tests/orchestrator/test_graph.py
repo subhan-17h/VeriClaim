@@ -24,7 +24,12 @@ from vericlaim.evidence import (
     Provenance,
     SqlLocator,
 )
-from vericlaim.orchestrator.graph import SOURCE_STAGE_PREFIX, build_graph, run_question
+from vericlaim.orchestrator.graph import (
+    SOURCE_STAGE_PREFIX,
+    SourceRequest,
+    build_graph,
+    run_question,
+)
 from vericlaim.orchestrator.sources import SourceCapability
 from vericlaim.orchestrator.state import (
     MAX_REPLANS,
@@ -88,12 +93,14 @@ class RecordingTool:
         self.evidence = evidence or []
         self.raises = raises
         self.delay = delay
+        self.requests: list[SourceRequest] = []
         self.goals: list[str] = []
         self.entered_at: list[float] = []
         self.left_at: list[float] = []
 
-    def __call__(self, goal: str) -> list[Evidence]:
-        self.goals.append(goal)
+    def __call__(self, request: SourceRequest) -> list[Evidence]:
+        self.requests.append(request)
+        self.goals.append(request.goal)
         self.entered_at.append(time.perf_counter())
         if self.delay:
             time.sleep(self.delay)
@@ -273,6 +280,16 @@ def test_each_source_is_asked_its_own_sub_goal_not_the_question() -> None:
     assert tools["sql"].goals == ["How often?"]
 
 
+def test_a_source_receives_the_runs_understanding_and_trace_id() -> None:
+    tool = RecordingTool([policy_evidence()])
+
+    state = run({"policy": tool}, ScriptedNodes(sources=("policy",)))
+
+    assert tool.requests[0].understanding == {"query_type": "lookup"}
+    assert tool.requests[0].trace_id
+    assert tool.requests[0].trace_id == state.trace_id
+
+
 def test_independent_sources_run_at_the_same_time() -> None:
     """Four sources one after another is four round trips the asker waits through. The
     overlap is what makes the fan-out worth having."""
@@ -416,6 +433,28 @@ def test_the_run_returns_a_validated_state_not_a_bag_of_keys() -> None:
     assert state.understanding["query_type"] == "lookup"
 
 
+def test_the_run_writes_a_trace_id() -> None:
+    state = run(
+        {"policy": RecordingTool([policy_evidence()])},
+        ScriptedNodes(sources=("policy",)),
+    )
+
+    assert state.trace_id
+
+
+def test_separate_runs_have_different_trace_ids() -> None:
+    first = run(
+        {"policy": RecordingTool([policy_evidence()])},
+        ScriptedNodes(sources=("policy",)),
+    )
+    second = run(
+        {"policy": RecordingTool([policy_evidence()])},
+        ScriptedNodes(sources=("policy",)),
+    )
+
+    assert first.trace_id != second.trace_id
+
+
 def test_the_stages_are_recorded_once_each() -> None:
     """A node that ran once and was recorded twice makes the cost figure wrong and the
     trace unreadable."""
@@ -438,7 +477,7 @@ def test_the_tools_are_called_on_the_worker_threads_the_graph_provides() -> None
     the caller arranging anything."""
     seen: list[int] = []
 
-    def tool(goal: str) -> list[Evidence]:
+    def tool(_request: SourceRequest) -> list[Evidence]:
         seen.append(threading.get_ident())
         return [policy_evidence()]
 

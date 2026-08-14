@@ -246,10 +246,11 @@ visible.
 - [x] **C-8.9** `scripts/replay.py` — put one question through the graph N times and record
       what varied: routing, per-source evidence counts, the verifier's verdict and its
       objections, which model wrote each stage, fallbacks walked, and cost. — `N`
-- [ ] **C-8.10** Widen `SourceTool` to `Callable[[str, SourceRequest], Sequence[Evidence]]`,
-      carrying `understanding` and `trace_id` in a frozen per-call request. Unstrands C-5.5's
-      entity resolver and writes `Provenance.trace_id`. — `N`
-- [ ] **C-8.11** Fix the cause C-8.9 named. — `N`
+- [x] **C-8.10** Widen `SourceTool` to `Callable[[SourceRequest], Sequence[Evidence]]`, carrying
+      the sub-goal, `understanding` and `trace_id` in a frozen per-call request. Unstrands
+      C-5.5's entity resolver and writes `Provenance.trace_id`. — `N`
+- [ ] **C-8.11** Make a failed ladder walk record what it tried, reproduce it offline, then fix
+      the cause that names. — `N`
 - [ ] **C-8.12** The four-clause flagship question, run live with no `contexts/` edits; and
       delete the two `pyproject.toml` entry points that name modules which do not exist. — `N`
 

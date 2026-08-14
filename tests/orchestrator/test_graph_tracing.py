@@ -22,7 +22,12 @@ from typing import Any
 
 import pytest
 
-from vericlaim.orchestrator.graph import _spanned_once, build_graph, run_question
+from vericlaim.orchestrator.graph import (
+    SourceRequest,
+    _spanned_once,
+    build_graph,
+    run_question,
+)
 from vericlaim.orchestrator.state import GraphState, StageRecord
 from vericlaim.tracing import (
     is_framework_tracing_enabled,
@@ -238,13 +243,14 @@ def test_the_run_is_summarized_on_the_root_span(monkeypatch) -> None:
         lambda **fields: recorded.append(fields) or True,
     )
 
-    run_graph(ScriptedNodes(sources=("policy", "sql")))
+    state = run_graph(ScriptedNodes(sources=("policy", "sql")))
 
     summary = recorded[-1]
     assert summary["vc_sources_routed"] == ["policy", "sql"]
     assert summary["vc_evidence"] == 2
     assert summary["vc_replans"] == 0
     assert summary["vc_verified"] is True
+    assert summary["vc_trace_id"] == state.trace_id
 
 
 def test_each_source_says_what_it_was_asked_and_what_it_returned(monkeypatch) -> None:
@@ -275,7 +281,7 @@ def test_a_source_that_could_not_be_reached_says_so_on_the_trace(monkeypatch) ->
         lambda **fields: recorded.append(fields) or True,
     )
 
-    def broken(_goal: str) -> list[Any]:
+    def broken(_request: SourceRequest) -> list[Any]:
         raise RuntimeError("policy index is missing")
 
     run_graph(ScriptedNodes(sources=("policy",)), tools={"policy": broken})
