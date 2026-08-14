@@ -33,12 +33,13 @@ from __future__ import annotations
 
 import functools
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
+from vericlaim.api.protocol import Event, EvidenceEvent, Final, RunStarted, Stage
 from vericlaim.evidence import Evidence
 from vericlaim.orchestrator.nodes.collect import collect as collect_node
 from vericlaim.orchestrator.nodes.plan import plan as plan_node
@@ -171,6 +172,53 @@ def run_question(graph: Any, question: str, **config: Any) -> GraphState:
     state = GraphState(**graph.invoke(start, **config))
     _trace_run(state)
     return state
+
+
+@traced("vericlaim.question.stream", run_type="chain", tags=["orchestrator"])
+def stream_question(
+    graph: Any, question: str, *, gateway: Any, **config: Any
+) -> Iterator[Event]:
+    """Run one question and report what it did as it did it.
+
+    A sibling to ``run_question`` rather than a second entry point built elsewhere: the
+    root span, the trace id and the run summary are defined once, so a streamed run and
+    an awaited one cannot disagree about what a run is.
+
+    ``gateway`` is required because the final event carries the ledger's cost. Making it
+    optional would let a caller silently emit the state's own total, which counts no
+    model call a source tool made.
+
+    The graph is asked for accumulated values rather than per-node updates, so the final
+    state is the last thing yielded and no reducer has to be reimplemented here to
+    rebuild it.
+    """
+    start = GraphState(question=question, trace_id=uuid.uuid4().hex)
+    yield RunStarted(trace_id=start.trace_id, question=start.question)
+
+    reported_stages = 0
+    reported_evidence = 0
+    last: dict[str, Any] | None = None
+
+    for value in graph.stream(start, stream_mode="values", **config):
+        last = value
+
+        stages = tuple(value.get("stages") or ())
+        for record in stages[reported_stages:]:
+            yield Stage.from_record(record)
+        reported_stages = len(stages)
+
+        evidence = value.get("evidence")
+        items = list(evidence.items) if evidence is not None else []
+        for item in items[reported_evidence:]:
+            yield EvidenceEvent(source=item.source_type, items=[item.to_dict()])
+        reported_evidence = len(items)
+
+    if last is None:
+        raise RuntimeError("The graph produced no state, so there is nothing to report")
+
+    state = GraphState(**last)
+    _trace_run(state)
+    yield Final.from_state(state, cost_usd=gateway.ledger.total_cost_usd)
 
 
 def _trace_run(state: GraphState) -> None:
