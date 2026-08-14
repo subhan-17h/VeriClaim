@@ -262,12 +262,25 @@ visible.
       delete the two `pyproject.toml` entry points that name modules which do not exist. — `N`
       - [x] Delete the two entry points naming modules that do not exist.
       - [ ] Run the four-clause question live and resolve citations from all four sources.
-            Blocked on C-8.14: the first live run answered two sources of four.
+            No longer blocked on a defect. C-8.14, C-8.15 and C-8.16 each removed one, and a
+            run under these conditions now answers with resolved citations at exit 0. What
+            remains is a clean-quota window: six flagship runs in one evening left
+            `gemini-3.5-flash` at 202 of 250 daily free requests, and an evidence-starved
+            fan-out cannot reach four sources whatever synthesis does.
 - [x] **C-8.14** Scope the entity resolver's ambiguity refusal to the sub-goal the source was
       actually asked, so a mention belonging to another clause cannot abort a source. — `N`
 - [x] **C-8.15** Make a counted gap say what the source was asked and what it declares it
       cannot answer, so the replan loop can correct a mis-assigned sub-goal instead of
       rephrasing it. — `N`
+- [x] **C-8.16** Stop a late plan decline from discarding evidence already collected: the
+      answerability gate is decided before evidence exists, but the replan loop re-enters
+      `plan`, so a later pass writes the same field to mean "no further work will close
+      this gap". Guard the refusal on an empty evidence set and carry the planner's reason
+      into `known_gaps`. — `N`
+      - [x] Reproduce live and record what the failure actually is, rather than what the
+            C-8.13 review section assumed it was.
+      - [x] Fail a test on the pre-fix code, then guard the refusal and preserve the reason.
+      - [x] Re-run live and record that the same conditions now answer with citations.
 
 **Acceptance:** ten runs recorded and their differences named; a source tool receives the
 run's understanding; the flagship question resolves citations from all four sources.
@@ -1057,6 +1070,16 @@ produced an answer carrying **no citation markers at all**, the verifier rejecte
 attempt carried none either, and the run refused. That refusal is the citation contract working:
 uncited text was withheld rather than presented as fact, and `scripts/ask.py` exited non-zero.
 
+> **Amended by C-8.16.** The paragraph above is wrong about the cause and is kept only so the
+> error is visible. The synthesizer did not produce uncited text: it produced nothing, and made
+> no model call. `gateway.ledger.by_task()` in the transcripts of runs 3 and 4 lists neither a
+> `synthesize` nor a `verify` entry, while runs 1 and 2 list one of each. The uncited prose the
+> verifier rejected was `_refusal`'s own text, returned because a replan pass had rewritten
+> `plans.answerable` to false after the evidence was already collected. The conclusion drawn
+> below -- that evidence-set size is the distinguishing variable -- is also wrong: a later
+> reproduction failed identically on three sources and 19 items with a single replan. Full
+> analysis under C-8.16.
+
 **This is not the C-8.9 finding.** That one measured *partial* citation -- 10-16 of 15-19
 evidence items uncited, with the rest cited. This is zero of 16 and zero of 27. The distinguishing
 variable across all four runs is the size of the evidence set: the two runs that synthesized
@@ -1122,3 +1145,66 @@ until C-10 has a consumer for them, and the SPA mount waits for a `frontend/dist
 -- a mount pointing at a missing directory is the failing entry point C-8.13 deleted two of.
 Authentication, CORS beyond local development, and rate limiting are out of scope for a
 single-operator demo rather than deferred.
+
+### C-8.16 - the refusal that threw the evidence away
+
+**The recorded diagnosis was wrong, and the ledger is what disproved it.** C-8.13's review
+section above states that the synthesizer "produced an answer carrying no citation markers at
+all". It produced no answer at all. `gateway.ledger.by_task()` for both failing runs lists no
+`synthesize` entry and no `verify` entry, while both succeeding runs list one of each -- the
+synthesizer never made a model call. See the amendment recorded under C-8.13.
+
+**Root cause.** `plan` decides `answerable` before any evidence exists, which is correct on the
+first pass. `graph.py` routes the replan loop back into `plan`, so a later pass re-decides the
+same field in a context where it means "I cannot plan further work to close the remaining gap".
+`_refusal` read that field with no regard for which pass wrote it, returned the bare
+`unanswerable_reason` as the answer -- citation-free prose -- and discarded a fully populated
+evidence set. Verification then correctly rejected uncited text, regenerated once, received the
+identical refusal, and degraded the run.
+
+**Reproduced three times out of three before touching anything**, which is what made the
+misdiagnosis visible:
+
+| Run | `answerable` | `sub_goals` | Evidence | Sources | Replans |
+|-----|--------------|-------------|----------|---------|---------|
+| 1 | false | `[]` | 24 | all four | 2 |
+| 2 | false | `[]` | 19 | three | 1 |
+| 3 | false | `[]` | 32 | all four | 2 |
+
+Each recorded `{"refused": "unanswerable", "cited": []}` twice with `model=""`.
+
+**Evidence-set size is not the variable.** C-8.13 recorded it as the distinguishing one. Run 2
+above had three sources, 19 items and a single replan and failed identically. The variable is
+whether the final plan pass returns `answerable=false`.
+
+**The gate was also answering the wrong question.** Run 1's reason was "The spreadsheet source
+could not be reached" while `sources_used` contained `spreadsheet` and 24 items sat in the
+evidence set. The replan planner reasons from the retry hint about what is missing; it never
+sees what was found.
+
+**The fix is one guard and one preserved finding.** The unanswerable refusal now requires an
+empty evidence set, and where a plan declines while evidence exists its reason is appended to
+`known_gaps` rather than dropped. No prompt changed: the SAY WHAT IS MISSING section already
+consumes `known_gaps`. Partial coverage is the case this node was built for.
+
+**Proof.** Two tests fail on the pre-fix source with `assert gateway.calls == []` -- the exact
+no-model-call symptom -- and a third pins the preserved behaviour, that a decline with no
+evidence still refuses without a model call. Offline suite 1490 passed, 77 deselected; ruff
+clean. Live, under the same `answerable=false`-with-evidence conditions that previously
+refused, two runs called `gemini-3.5-flash-lite`, resolved 8 and 2 citations, and returned
+`verified: true, degraded: false` at exit 0. All six pre-fix runs exited 1; all three post-fix
+runs exited 0. One answer states "The supplied spreadsheet and SQL sources could not be
+consulted, so the answer is incomplete for that reason" -- the preserved gap, in the output.
+
+**C-8.13 is still not met, and this fix does not meet it.** None of the three post-fix runs
+gathered all four sources: evidence fell to 11, 0 and 5 items and latency to 9.3s, 3.4s and
+13.0s, against 24/19/32 items and 57-80s earlier the same evening. That collapse is upstream of
+this change -- the diff touches `synthesize`, which runs after `collect`, and cannot reduce what
+a source returns. `gemini-3.5-flash` stood at 202 of its 250 daily free requests, and it backs
+both the `cheap` and `mid` tiers where `sql_generator` alone spends about twelve calls per run
+against an RPM of 10. C-8.13 now waits on a clean-quota window rather than on a defect.
+
+**Found while proving this, not fixed here.** `scripts/ask.py` exits 0 for a no-evidence
+refusal, because an answer citing nothing is trivially consistent and `_exit_code` passes it. A
+run that gathered nothing should not report success to the gate that C-8.13 is measured by.
+Recorded rather than fixed: it is a separate defect in the acceptance gate itself.
