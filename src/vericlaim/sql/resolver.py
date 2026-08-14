@@ -38,7 +38,7 @@ from typing import Any, Literal
 
 import sqlglot
 from sqlglot import exp
-from sqlglot.errors import ParseError
+from sqlglot.errors import SqlglotError
 
 from vericlaim.sql.values_catalog import (
     Catalog,
@@ -622,7 +622,7 @@ def fuzzy_rewrite_sql(sql: str, catalog: Catalog) -> str | None:
     """
     try:
         tree = sqlglot.parse_one(sql, read="postgres")
-    except (ParseError, ValueError):
+    except (SqlglotError, ValueError):
         return None
     if tree is None:
         return None
@@ -662,7 +662,7 @@ def unresolvable_filters(sql: str, catalog: Catalog) -> tuple[str, ...]:
     """
     try:
         tree = sqlglot.parse_one(sql, read="postgres")
-    except (ParseError, ValueError):
+    except (SqlglotError, ValueError):
         return ()
     if tree is None:
         return ()

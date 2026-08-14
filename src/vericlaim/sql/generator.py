@@ -33,7 +33,7 @@ from typing import Any
 
 import sqlglot
 from sqlglot import exp
-from sqlglot.errors import ParseError
+from sqlglot.errors import SqlglotError
 
 from vericlaim.sql.contexts import SchemaContext, context_detail
 from vericlaim.sql.planner import PlanStep
@@ -339,7 +339,7 @@ def _direct_projection_columns(sql: str, available: set[str]) -> set[str]:
 def _parse_select(sql: str) -> exp.Select | None:
     try:
         statement = sqlglot.parse_one(sql, read="postgres")
-    except (ParseError, ValueError):
+    except (SqlglotError, ValueError):
         return None
     return statement if isinstance(statement, exp.Select) else None
 

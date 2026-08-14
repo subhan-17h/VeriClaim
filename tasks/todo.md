@@ -307,6 +307,13 @@ visible.
       - [x] Widen the malformed check to a single bracketed identifier, bounded so ordinary
             bracketed prose cannot degrade a sound answer.
       - [x] Tell the synthesizer that only the evidence-block ids are citable.
+- [x] **C-8.18** Stop the acceptance gate reporting success on an incomplete run: a source
+      that could not be consulted leaves the question partly unexamined, and `_exit_code`
+      counted that as success because an answer citing nothing is trivially consistent. — `N`
+- [x] **C-8.19** Catch the sqlglot error the repair loop was written for: an unterminated
+      quote raises `TokenError`, which is `ParseError`'s sibling rather than its subclass,
+      so a model emitting prose in place of SQL escaped every handler and aborted the whole
+      source instead of being rejected and retried. — `N`
 
 **Acceptance:** ten runs recorded and their differences named; a source tool receives the
 run's understanding; the flagship question resolves citations from all four sources.

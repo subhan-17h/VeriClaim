@@ -43,7 +43,7 @@ from dataclasses import dataclass, field
 
 import sqlglot
 from sqlglot import exp
-from sqlglot.errors import OptimizeError, ParseError
+from sqlglot.errors import OptimizeError, SqlglotError
 from sqlglot.optimizer.qualify import qualify
 from sqlglot.optimizer.scope import traverse_scope
 
@@ -257,7 +257,11 @@ def validate_sql(
 
     try:
         statements = sqlglot.parse(sql, read="postgres")
-    except (ParseError, ValueError) as exc:
+    # SqlglotError rather than ParseError: an unterminated quote raises TokenError,
+    # which is ParseError's sibling, not its subclass. A model that emits prose in place
+    # of SQL produces exactly that, and catching only ParseError let it escape past the
+    # repair loop and abort the whole source instead of being rejected and retried.
+    except (SqlglotError, ValueError) as exc:
         return _reject(f"SQL parse error: {exc}")
     if len(statements) != 1:
         return _reject("Exactly one SQL statement is required")

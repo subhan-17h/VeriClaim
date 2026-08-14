@@ -36,7 +36,7 @@ from typing import Any
 
 import sqlglot
 from sqlglot import exp
-from sqlglot.errors import ParseError
+from sqlglot.errors import SqlglotError
 
 from vericlaim.sql.contexts import (
     Invariant,
@@ -366,7 +366,7 @@ def _projection_sources(
     """
     try:
         statement = sqlglot.parse_one(sql, read="postgres")
-    except (ParseError, ValueError):
+    except (SqlglotError, ValueError):
         return None
     if not isinstance(statement, exp.Select):
         return None

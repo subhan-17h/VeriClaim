@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import sqlglot
-from sqlglot.errors import ParseError
+from sqlglot.errors import SqlglotError
 
 from vericlaim.config import Settings, get_settings
 from vericlaim.sql.candidates import Candidate, Selection, select
@@ -413,5 +413,5 @@ def _same_sql(left: str, right: str) -> bool:
 def _canonical(sql: str) -> str:
     try:
         return sqlglot.parse_one(sql, read="postgres").sql(dialect="postgres")
-    except (ParseError, ValueError, AttributeError):
+    except (SqlglotError, ValueError, AttributeError):
         return " ".join(sql.split()).casefold()

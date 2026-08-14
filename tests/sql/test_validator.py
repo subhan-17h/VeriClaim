@@ -332,3 +332,17 @@ def test_a_rejected_statement_never_returns_sql() -> None:
 
     assert result.sql == ""
     assert result.tables == ()
+
+
+def test_prose_that_opens_a_quote_is_rejected_rather_than_raised() -> None:
+    """sqlglot signals an unterminated quote with TokenError, which is a *sibling* of
+    ParseError rather than a subclass. A model that emits prose instead of SQL -- "the
+    adjuster's base region" -- produces exactly that, so a handler written for
+    ParseError alone lets it escape the bounded repair loop and kill the whole source.
+    The validator must fail closed here, not raise.
+    """
+    result = validate("SELECT region FROM ops.claims WHERE x = the adjuster's base region")
+
+    assert not result.ok
+    assert "parse error" in result.reason.lower()
+    assert result.sql == ""
