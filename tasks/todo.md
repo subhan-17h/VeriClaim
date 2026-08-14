@@ -249,9 +249,11 @@ visible.
 - [x] **C-8.10** Widen `SourceTool` to `Callable[[SourceRequest], Sequence[Evidence]]`, carrying
       the sub-goal, `understanding` and `trace_id` in a frozen per-call request. Unstrands
       C-5.5's entity resolver and writes `Provenance.trace_id`. — `N`
-- [ ] **C-8.11** Make a failed ladder walk record what it tried, reproduce it offline, then fix
-      the cause that names. — `N`
-- [ ] **C-8.12** The four-clause flagship question, run live with no `contexts/` edits; and
+- [x] **C-8.11** Make a failed ladder walk record what it tried — the attempts and hops now
+      travel on the raised error — and reproduce the live failure offline at no quota cost. — `N`
+- [ ] **C-8.12** Fix the ladder fragility C-8.11 made visible, and re-measure with
+      `scripts/replay.py`. — `N`
+- [ ] **C-8.13** The four-clause flagship question, run live with no `contexts/` edits; and
       delete the two `pyproject.toml` entry points that name modules which do not exist. — `N`
 
 **Acceptance:** ten runs recorded and their differences named; a source tool receives the
@@ -873,3 +875,40 @@ establish a rate for an intermittent outcome, and every one of them ran against 
 exhausted flash allowance — an unrepresentative condition that happens to be the one that
 exposed the defect. The honest statement is that a real defect was found and the historical
 degradation was not reproduced.
+
+### C-8.11 — the failed walk, made legible
+
+**A correction to the finding above, from reading `data/replay/flagship.ndjson` run 5 rather
+than re-reading the write-up.** The finding named the inverted ladder as the *confirmed* cause.
+The record shows something narrower, and the difference matters:
+
+- All eight recorded fallback events are `flash -> flash-lite` on a daily-quota exhaustion, and
+  every one **succeeded**. The `strong` ladder worked exactly as designed.
+- What failed is `sql_generator`, a `mid` task, whose effective ladder is flash-lite (primary)
+  -> flash (fallback) -> paid. So **flash-lite failed first**, and only then was flash found
+  day-exhausted.
+- **Why flash-lite failed is unrecoverable.** `walk_ladder` built its `events` and `failures`
+  lists and discarded both on every path that raised; they survived only via
+  `gateway.with_fallbacks`, which runs on success. `Gateway._finish` records to the ledger on
+  success too. The one ladder walk most worth diagnosing was the only one leaving no trace.
+
+So the inverted ladder is a real fragility but was **not proven** to be run 5's proximate cause,
+and no amount of re-reading recovers it. That is the defect this card fixes, and it is why the
+ladder itself is left alone until C-8.12.
+
+**What changed.** The attempts and the hops now travel on the raised error —
+`PaidFallbackBlockedError.attempts` / `.events` and `AllProvidersFailedError.events` — as
+structured data rather than only as prose, so C-9.3 can expose them. Two situations that shared
+one sentence now read differently: a ladder with no free rung configured (nothing attempted) and
+a ladder whose every free rung was tried and failed. Because `_source_node` stringifies the
+exception, the richer message reaches `GraphState.failures` and the replay record for free.
+
+**Evidence.** Four new tests, all of which fail against the previous behaviour — verified by
+reverting the two source files and re-running them, not assumed. They reproduce run 5's exact
+shape offline: a transient on the free primary, a daily-quota exhaustion on the free backup, the
+paid rung blocked; and they assert the error can tell those two reasons apart, which is
+precisely what the live record could not do. **1448 passed, 77 deselected**; ruff clean; no
+quota spent.
+
+**A limitation, stated plainly.** This makes the *next* such failure diagnosable. It does not
+recover the 2026-08-13 one, whose proximate trigger is gone for good.

@@ -14,9 +14,11 @@ import pytest
 from vericlaim.config import ModelRouting, ModelSpec, Settings
 from vericlaim.gateway.core import Gateway, reset_session_spend
 from vericlaim.gateway.types import (
+    AllProvidersFailedError,
     BudgetExceededError,
     PaidFallbackBlockedError,
     PermanentProviderError,
+    QuotaExhaustedError,
     TransientProviderError,
     UsageLedger,
 )
@@ -117,6 +119,63 @@ class TestPaidFallbackBlocked:
         assert gateway.ledger.total_cost_usd == 0.0
         assert "beta/beta-billed" in info.value.blocked
 
+    def test_failed_free_rungs_name_their_distinct_reasons(
+        self, free_first_routing, alpha, beta
+    ):
+        alpha.script = {
+            "alpha-free": [_rate_limited()],
+            "alpha-free-lite": [
+                QuotaExhaustedError(
+                    "free-tier daily allowance exhausted",
+                    provider="alpha",
+                    model="alpha-free-lite",
+                    resets_at="midnight US/Pacific",
+                )
+            ],
+        }
+        gateway = Gateway(
+            routing=free_first_routing, settings=Settings(allow_paid_fallback=False)
+        )
+
+        with pytest.raises(PaidFallbackBlockedError) as info:
+            gateway.complete("synthesize", "q")
+
+        message = str(info.value)
+        assert "alpha/alpha-free: 429 RESOURCE_EXHAUSTED" in message
+        assert (
+            "alpha/alpha-free-lite: free-tier daily allowance exhausted" in message
+        )
+        assert beta.calls == []
+
+    def test_failed_free_walk_is_available_as_structured_data(
+        self, free_first_routing, alpha
+    ):
+        transient = _rate_limited()
+        daily = QuotaExhaustedError(
+            "free-tier daily allowance exhausted",
+            provider="alpha",
+            model="alpha-free-lite",
+            resets_at="midnight US/Pacific",
+        )
+        alpha.script = {
+            "alpha-free": [transient],
+            "alpha-free-lite": [daily],
+        }
+        gateway = Gateway(
+            routing=free_first_routing, settings=Settings(allow_paid_fallback=False)
+        )
+
+        with pytest.raises(PaidFallbackBlockedError) as info:
+            gateway.complete("synthesize", "q")
+
+        assert info.value.attempts == [
+            ("alpha", "alpha-free", transient),
+            ("alpha", "alpha-free-lite", daily),
+        ]
+        assert [
+            (event.from_model, event.to_model) for event in info.value.events
+        ] == [("alpha-free", "alpha-free-lite")]
+
     def test_error_names_the_flag_that_would_permit_it(
         self, free_first_routing, alpha, beta
     ):
@@ -138,6 +197,22 @@ class TestPaidFallbackBlocked:
         )
         with pytest.raises(PaidFallbackBlockedError):
             gateway.complete("synthesize", "q")
+        assert beta.calls == []
+
+    def test_all_paid_ladder_explains_that_nothing_was_attempted(
+        self, paid_only_routing, beta
+    ):
+        gateway = Gateway(
+            routing=paid_only_routing, settings=Settings(allow_paid_fallback=False)
+        )
+
+        with pytest.raises(PaidFallbackBlockedError) as info:
+            gateway.complete("synthesize", "q")
+
+        assert "No free model was configured for task 'synthesize'" in str(info.value)
+        assert "VC_ALLOW_PAID_FALLBACK" in str(info.value)
+        assert info.value.attempts == []
+        assert info.value.events == []
         assert beta.calls == []
 
     def test_enabling_the_flag_takes_the_paid_hop(
@@ -183,6 +258,50 @@ class TestPaidFallbackBlocked:
         )
         with pytest.raises(PaidFallbackBlockedError):
             gateway.complete("synthesize", "q")
+
+
+class TestFailedWalkEvents:
+    def test_all_free_exhaustion_carries_the_fallback_events(
+        self, routing, alpha, beta
+    ):
+        alpha.script = {
+            "alpha-main": [
+                PermanentProviderError(
+                    "primary rejected", provider="alpha", model="alpha-main"
+                )
+            ],
+            "alpha-small": [
+                PermanentProviderError(
+                    "tertiary rejected", provider="alpha", model="alpha-small"
+                )
+            ],
+        }
+        beta.script = {
+            "beta-backup": [
+                PermanentProviderError(
+                    "backup rejected", provider="beta", model="beta-backup"
+                )
+            ]
+        }
+
+        with pytest.raises(AllProvidersFailedError) as info:
+            Gateway(routing=routing).complete("synthesize", "q")
+
+        assert [
+            (event.from_model, event.to_model, event.reason)
+            for event in info.value.events
+        ] == [
+            (
+                "alpha-main",
+                "beta-backup",
+                "PermanentProviderError: primary rejected",
+            ),
+            (
+                "beta-backup",
+                "alpha-small",
+                "PermanentProviderError: backup rejected",
+            ),
+        ]
 
 
 class TestSpendCeiling:

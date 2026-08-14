@@ -68,11 +68,13 @@ def walk_ladder(
         ladder = tuple(spec for spec in full_ladder if not spec.paid)
         blocked = [spec.label for spec in full_ladder if spec.paid]
 
-    if not ladder:
-        raise PaidFallbackBlockedError(task, blocked)
-
     events: list[FallbackEvent] = []
     failures: list[tuple[str, str, Exception]] = []
+
+    if not ladder:
+        raise PaidFallbackBlockedError(
+            task, blocked, attempts=failures, events=events
+        )
 
     for index, spec in enumerate(ladder):
         try:
@@ -104,5 +106,7 @@ def walk_ladder(
     # "all providers failed" would hide the fact that a working option was declined
     # on policy, which is a different problem with a different fix.
     if blocked:
-        raise PaidFallbackBlockedError(task, blocked)
-    raise AllProvidersFailedError(task, failures)
+        raise PaidFallbackBlockedError(
+            task, blocked, attempts=failures, events=events
+        )
+    raise AllProvidersFailedError(task, failures, events=events)

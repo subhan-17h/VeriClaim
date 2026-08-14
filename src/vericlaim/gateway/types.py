@@ -179,13 +179,20 @@ class AllProvidersFailedError(GatewayError):
     rather than reporting only the last error.
     """
 
-    def __init__(self, task: str, failures: list[tuple[str, str, Exception]]) -> None:
+    def __init__(
+        self,
+        task: str,
+        failures: list[tuple[str, str, Exception]],
+        *,
+        events: list[FallbackEvent] | tuple[FallbackEvent, ...] = (),
+    ) -> None:
         detail = "; ".join(
             f"{provider}/{model}: {error}" for provider, model, error in failures
         )
         super().__init__(f"All models failed for task {task!r}: {detail}")
         self.task = task
         self.failures = failures
+        self.events = events
 
 
 class StructuredOutputError(GatewayError):
@@ -201,14 +208,36 @@ class PaidFallbackBlockedError(GatewayError):
     costing money with no signal that anything had changed.
     """
 
-    def __init__(self, task: str, blocked: list[str]) -> None:
-        super().__init__(
-            f"Task {task!r} exhausted its free models and the remaining fallbacks are "
-            f"paid ({', '.join(blocked)}). Set VC_ALLOW_PAID_FALLBACK=true to permit "
-            "billed providers."
-        )
+    def __init__(
+        self,
+        task: str,
+        blocked: list[str],
+        *,
+        attempts: list[tuple[str, str, Exception]] | None = None,
+        events: list[FallbackEvent] | tuple[FallbackEvent, ...] = (),
+    ) -> None:
+        attempts = attempts if attempts is not None else []
+        if attempts:
+            detail = "; ".join(
+                f"{provider}/{model}: {error}"
+                for provider, model, error in attempts
+            )
+            message = (
+                f"Task {task!r} exhausted its free models and the remaining fallbacks "
+                f"are paid ({', '.join(blocked)}). Tried {detail}. Set "
+                "VC_ALLOW_PAID_FALLBACK=true to permit billed providers."
+            )
+        else:
+            message = (
+                f"No free model was configured for task {task!r}; its configured "
+                f"models are paid ({', '.join(blocked)}). Set "
+                "VC_ALLOW_PAID_FALLBACK=true to permit billed providers."
+            )
+        super().__init__(message)
         self.task = task
         self.blocked = blocked
+        self.attempts = attempts
+        self.events = events
 
 
 class BudgetExceededError(GatewayError):
