@@ -153,6 +153,32 @@ class TestTheExitCode:
     def test_a_degraded_verification_fails(self, script) -> None:
         assert script._exit_code(_state("Covered [E1].", degraded=True)) == 1
 
+    def test_a_source_that_could_not_be_consulted_fails_the_run(self, script) -> None:
+        """A well-cited answer over three sources when four were asked is incomplete,
+        not successful. This gate is what phase acceptance is measured by, so it has to
+        distinguish "the records say nothing" from "we never reached the records".
+        """
+        state = GraphState(
+            question="Are burst pipes covered?",
+            answer="Covered [E1]. There were 398 [E2].",
+            evidence=_evidence(),
+            citations={"verified": True, "degraded": False},
+            collection={"failed_sources": ["spreadsheet"]},
+        )
+        assert script._exit_code(state) == 1
+
+    def test_a_source_consulted_that_held_nothing_still_succeeds(self, script) -> None:
+        # Bounds the check above: negative information is a real answer, and a corpus
+        # that genuinely lacks something must not be reported as a broken run.
+        state = GraphState(
+            question="Are burst pipes covered?",
+            answer="Covered [E1]. There were 398 [E2].",
+            evidence=_evidence(),
+            citations={"verified": True, "degraded": False},
+            collection={"silent_sources": ["spreadsheet"]},
+        )
+        assert script._exit_code(state) == 0
+
 
 class TestJsonOutput:
     def test_the_run_serialises(self, script) -> None:

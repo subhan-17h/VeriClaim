@@ -122,11 +122,20 @@ def _locator_detail(item: object, settings: object) -> list[str]:
 
 
 def _exit_code(state: GraphState) -> int:
-    """Non-zero when the answer cannot stand on its evidence."""
+    """Non-zero when the answer cannot stand on its evidence, or was never complete.
+
+    A source that could not be consulted is a different thing from a source that was
+    consulted and held nothing: the first leaves the question partly unexamined, the
+    second is negative information and a legitimate answer. Only the first fails here.
+    Phase acceptance is measured through this gate, and a gate that reports success on
+    a run which never reached a source would be measuring the wrong thing.
+    """
     report = resolve_citations(state.answer, state.evidence)
     if not report.ok:
         return 1
     if state.citations.get("degraded"):
+        return 1
+    if state.collection.get("failed_sources"):
         return 1
     return 0
 
