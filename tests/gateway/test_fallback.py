@@ -17,6 +17,7 @@ from vericlaim.gateway.types import (
     Message,
     PermanentProviderError,
     ProviderUnavailableError,
+    QuotaExhaustedError,
     TransientProviderError,
 )
 
@@ -98,6 +99,78 @@ class TestFallback:
         assert result.provider == "beta"
         # 1 initial + 2 retries against the primary before moving on
         assert len(alpha.calls) == 3
+
+    def test_non_final_rung_uses_ordinary_transient_budget_before_fallback(
+        self, routing, alpha, beta
+    ):
+        alpha.script = {
+            "alpha-main": [_permanent()],
+            "alpha-small": ["ok"],
+        }
+        beta.script = {"beta-backup": [_transient("beta-backup", "beta")]}
+
+        result = Gateway(routing=routing).complete("synthesize", "q")
+
+        assert result.model == "alpha-small"
+        assert (
+            beta.models_called.count("beta-backup") == routing.transient_retries + 1
+        )
+
+    def test_final_rung_uses_larger_transient_budget_before_giving_up(
+        self, routing, alpha, beta
+    ):
+        alpha.script = {
+            "alpha-main": [_permanent()],
+            "alpha-small": [_transient("alpha-small")],
+        }
+        beta.script = {"beta-backup": [_permanent("beta-backup", "beta")]}
+
+        with pytest.raises(AllProvidersFailedError):
+            Gateway(routing=routing).complete("synthesize", "q")
+
+        assert (
+            alpha.models_called.count("alpha-small")
+            == routing.last_rung_transient_retries + 1
+        )
+
+    def test_daily_quota_on_final_rung_is_not_retried(self, routing, alpha, beta):
+        alpha.script = {
+            "alpha-main": [_permanent()],
+            "alpha-small": [
+                QuotaExhaustedError(
+                    "daily allowance exhausted",
+                    provider="alpha",
+                    model="alpha-small",
+                )
+            ],
+        }
+        beta.script = {"beta-backup": [_permanent("beta-backup", "beta")]}
+
+        with pytest.raises(AllProvidersFailedError):
+            Gateway(routing=routing).complete("synthesize", "q")
+
+        # Daily exhaustion is a non-transient ProviderError because no retry budget
+        # can outlast its midnight Pacific reset.
+        assert alpha.models_called.count("alpha-small") == 1
+
+    def test_final_rung_recovery_returns_one_completion(self, routing, alpha, beta):
+        alpha.script = {
+            "alpha-main": [_permanent()],
+            "alpha-small": [
+                _transient("alpha-small"),
+                _transient("alpha-small"),
+                "recovered",
+            ],
+        }
+        beta.script = {"beta-backup": [_permanent("beta-backup", "beta")]}
+        gateway = Gateway(routing=routing)
+
+        result = gateway.complete("synthesize", "q")
+
+        assert result.text == "recovered"
+        assert result.attempts == 3
+        assert alpha.models_called.count("alpha-small") == 3
+        assert gateway.ledger.calls == [result]
 
     def test_ladder_walks_multiple_hops(self, routing, alpha, beta):
         alpha.script = {

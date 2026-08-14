@@ -78,12 +78,18 @@ def walk_ladder(
 
     for index, spec in enumerate(ladder):
         try:
+            retry_override = {}
+            if index == len(ladder) - 1:
+                retry_override["transient_retries"] = (
+                    gateway.routing.last_rung_transient_retries
+                )
             completion = gateway.call_model(
                 spec,
                 messages,
                 task=task,
                 json_schema=json_schema,
                 temperature=temperature,
+                **retry_override,
             )
         except ProviderError as exc:
             failures.append((spec.provider, spec.model, exc))

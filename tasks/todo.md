@@ -251,8 +251,13 @@ visible.
       C-5.5's entity resolver and writes `Provenance.trace_id`. — `N`
 - [x] **C-8.11** Make a failed ladder walk record what it tried — the attempts and hops now
       travel on the raised error — and reproduce the live failure offline at no quota cost. — `N`
-- [ ] **C-8.12** Fix the ladder fragility C-8.11 made visible, and re-measure with
-      `scripts/replay.py`. — `N`
+- [x] **C-8.12** Give the final callable rung a larger transient retry budget without
+      spending retries on daily quota exhaustion. — `N`
+      - [x] Pin ordinary retries on non-final rungs and extended transient retries on
+            the final callable rung, including terminal daily quota and recovery cases.
+      - [x] Add and thread a configured last-rung transient retry budget without
+            changing the ladder's models, order, or paid-fallback policy.
+      - [x] Run the offline suite and Ruff, then record the evidence below.
 - [ ] **C-8.13** The four-clause flagship question, run live with no `contexts/` edits; and
       delete the two `pyproject.toml` entry points that name modules which do not exist. — `N`
 
@@ -912,3 +917,28 @@ quota spent.
 
 **A limitation, stated plainly.** This makes the *next* such failure diagnosable. It does not
 recover the 2026-08-13 one, whose proximate trigger is gone for good.
+
+### C-8.12 - protect the last callable rung
+
+**What changed.** `limits.last_rung_transient_retries` sets a five-retry budget for the final
+rung left after the paid-fallback filter. `walk_ladder` supplies that override only at the final
+index; every earlier rung still uses `transient_retries`. The models, their order, and the paid
+guard are unchanged.
+
+**Why daily quota stays terminal.** `QuotaExhaustedError` remains a non-transient
+`ProviderError`, so it never enters `Gateway.call_model`'s transient retry handler. The larger
+budget therefore helps timeouts and other recoverable failures without waiting on an allowance
+that resets at midnight Pacific.
+
+**Evidence.** Four new offline fallback tests pin the ordinary non-final budget, the extended
+final budget, one-attempt daily exhaustion, and successful recovery without duplicate ledger
+entries. **1452 passed, 77 deselected**; ruff clean; no live quota spent.
+
+**Which of those four actually pin the new behaviour, stated precisely.** Reverting the four
+source files and re-running showed **one** of them failing — the extended final-rung budget,
+where the old ladder gave the last rung three attempts against the six now configured. The
+other three pass in both directions *by design*: they guard the halves that must NOT change —
+that a non-final rung still gets the ordinary budget, that a daily exhaustion is never retried
+into the larger one, and that a recovery is recorded once. A guard that passed before the change
+is doing its job; it is only worth saying so that nobody later mistakes four green tests for four
+proofs of the fix.

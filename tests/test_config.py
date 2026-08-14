@@ -44,7 +44,11 @@ MINIMAL = {
     },
     "tasks": {"route": "cheap", "synthesize": "strong"},
     "fallback": {"strong": [{"provider": "gemini", "model": "pro"}]},
-    "limits": {"transient_retries": 3, "transient_backoff_s": 0.5},
+    "limits": {
+        "transient_retries": 3,
+        "last_rung_transient_retries": 6,
+        "transient_backoff_s": 0.5,
+    },
 }
 
 
@@ -130,6 +134,7 @@ class TestModelRouting:
     def test_limits_are_read(self, tmp_path):
         routing = load_model_routing(_write_routing(tmp_path, MINIMAL))
         assert routing.transient_retries == 3
+        assert routing.last_rung_transient_retries == 6
         assert routing.transient_backoff_s == 0.5
 
     def test_task_pointing_at_missing_tier_is_rejected(self, tmp_path):

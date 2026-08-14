@@ -143,20 +143,27 @@ class Gateway:
         task: str,
         json_schema: dict[str, Any] | None = None,
         temperature: float = 0.0,
+        transient_retries: int | None = None,
     ) -> Completion:
         """Call exactly one model, retrying only transient failures.
 
         Permanent failures propagate immediately: retrying a malformed request or a
         bad API key against the same model wastes the retry budget that a genuine
-        rate limit needs.
+        rate limit needs. A caller may override the transient retry budget when its
+        position in the ladder leaves no other model to try.
         """
         self._check_budget()
         provider = get_provider(spec.provider)
+        retry_budget = (
+            self._routing.transient_retries
+            if transient_retries is None
+            else transient_retries
+        )
         attempts = 0
         started = time.perf_counter()
         last_transient: Exception | None = None
 
-        for attempt in range(self._routing.transient_retries + 1):
+        for attempt in range(retry_budget + 1):
             attempts = attempt + 1
             try:
                 # Throttle per attempt, since every attempt is a real request against
@@ -170,8 +177,10 @@ class Gateway:
                 )
                 break
             except TransientProviderError as exc:
+                # QuotaExhaustedError is a non-transient ProviderError, so a daily
+                # allowance bypasses even an extended final-rung retry budget.
                 last_transient = exc
-                if attempt == self._routing.transient_retries:
+                if attempt == retry_budget:
                     raise
                 time.sleep(self._routing.transient_backoff_s * (attempt + 1))
         else:  # pragma: no cover - loop always breaks or raises

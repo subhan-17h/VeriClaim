@@ -143,8 +143,9 @@ fallback:
        paid: false, rpm: 10, rpd: 250, max_output_tokens: 4096}
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
        paid: true, max_output_tokens: 2048}
-  # The pair is inverted along with the tier above: flash is now mid's fallback, so a
-  # flash-lite minute-limit still has somewhere free to go before the paid rung.
+  # Flash is a real free fallback for a flash-lite minute-limit burst. The strong tier
+  # spends flash's smaller daily allowance before the day is out, however; after that
+  # mid has only flash-lite, which is why the final callable rung gets more retries.
   mid:
     - {provider: gemini, model: gemini-3.5-flash, usd_per_1m_input: 0.0, usd_per_1m_output: 0.0,
        paid: false, rpm: 10, rpd: 250, max_output_tokens: 4096}
@@ -162,4 +163,6 @@ fallback:
 limits:
   # Transient-error retries against the SAME model before walking the fallback ladder.
   transient_retries: 2
+  # The final callable rung gets more retries because there is no next model to try.
+  last_rung_transient_retries: 5
   transient_backoff_s: 1.0

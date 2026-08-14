@@ -329,6 +329,7 @@ class ModelRouting:
     fallbacks: dict[str, tuple[ModelSpec, ...]]
     transient_retries: int
     transient_backoff_s: float
+    last_rung_transient_retries: int = 5
 
     def tier_for(self, task: str) -> str:
         """Return the tier name serving ``task``."""
@@ -413,6 +414,9 @@ def load_model_routing(path: Path | None = None) -> ModelRouting:
         fallbacks=fallbacks,
         transient_retries=int(limits.get("transient_retries", 2)),
         transient_backoff_s=float(limits.get("transient_backoff_s", 1.0)),
+        last_rung_transient_retries=int(
+            limits.get("last_rung_transient_retries", 5)
+        ),
     )
 
 
