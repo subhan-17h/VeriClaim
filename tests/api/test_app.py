@@ -122,3 +122,41 @@ def test_the_keepalive_fires_while_a_run_is_quiet(monkeypatch) -> None:
         "run_started",
         "final",
     ]
+
+
+def test_the_trace_id_and_the_executed_sql_reach_the_client() -> None:
+    # The trace id is how a run in the UI is matched to a run in the tracing backend, and
+    # the executed SQL is the claim's audit trail. Neither is derivable downstream, so
+    # both are asserted at the boundary rather than assumed.
+    payload = {
+        "answer": "an answer",
+        "cost_usd": 1.0,
+        "trace_id": "trace-abc",
+        "evidence": [
+            {
+                "id": "E1",
+                "source_type": "sql",
+                "locator": {
+                    "tables": ["example_table"],
+                    "executed_sql": "SELECT 1",
+                    "row_count": 1,
+                },
+            }
+        ],
+    }
+    stub = StubRun([RunStarted(trace_id="trace-abc", question="q"), Final(payload=payload)])
+
+    response = _client(stub).post("/api/ask", json={"question": "q"})
+    body = response.json()
+
+    assert body["trace_id"] == "trace-abc"
+    assert body["evidence"][0]["locator"]["executed_sql"] == "SELECT 1"
+
+
+def test_the_first_streamed_event_carries_the_same_trace_as_the_final() -> None:
+    payload = {"answer": "an answer", "cost_usd": 1.0, "trace_id": "trace-abc"}
+    stub = StubRun([RunStarted(trace_id="trace-abc", question="q"), Final(payload=payload)])
+
+    events = _lines(_client(stub).post("/api/ask/stream", json={"question": "q"}))
+
+    assert events[0]["trace_id"] == events[-1]["trace_id"] == "trace-abc"

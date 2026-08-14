@@ -274,9 +274,10 @@ run's understanding; the flagship question resolves citations from all four sour
 
 ## Phase C-9 — API + streaming
 
-- [ ] **C-9.1** `api/protocol.py` — NDJSON event schema. — `V` both repos
-- [ ] **C-9.2** `api/app.py` — `/api/ask` + `/api/ask/stream`, keepalive, SPA mount. — `A` both
-- [ ] **C-9.3** **Expose the trace and the executed SQL** (neither reference repo does). — `N`
+- [x] **C-9.1** `api/protocol.py` — NDJSON event schema. — `V` both repos
+- [x] **C-9.2** `api/app.py` — `/api/ask` + `/api/ask/stream`, keepalive. The SPA mount moves
+      to C-10.1, where a `frontend/dist` to serve first exists. — `A` both
+- [x] **C-9.3** **Expose the trace and the executed SQL** (neither reference repo does). — `N`
 - [ ] **C-9.4** Source-browser endpoints incl. `#page=N` anchoring. — `A` CSRS
 - [ ] **C-9.5** Client cancellation. — `N`
 
@@ -1069,3 +1070,55 @@ goldens will say far more than four runs of one question. C-8.13 stays open agai
 
 **Cost across all four runs: $0.000000.** Lifetime spend is unchanged at $0.000004 of the $0.50
 ceiling; free-tier usage ended the day at 30/250 flash and 35/1000 flash-lite.
+
+### C-9.1 to C-9.3 - the API, and what it is careful about
+
+**What shipped.** A closed five-event NDJSON protocol (`run_started`, `stage`, `evidence`,
+`final`, `error`); `stream_question` beside `run_question` in the orchestrator; and two
+endpoints, `POST /api/ask` and `POST /api/ask/stream`.
+
+**Streaming lives in the orchestrator, not the API.** `stream_question` opens the same root
+span and writes the same trace id `run_question` does, so a streamed run and an awaited one
+cannot disagree about what a run is. Had the API driven `graph.stream()` itself, that logic
+would exist twice and drift once. The API is transport: it serializes events and adds a
+keepalive.
+
+**The keepalive is not a protocol event.** `ping` appears nowhere in `protocol.py` or
+`EVENT_NAMES`. A run's event history should not depend on how fast the network was.
+
+**The ledger constraint is enforced structurally rather than by convention.** C-8's review
+recorded that tool-internal model spend reaches no `StageRecord`, so `state.total_cost_usd`
+under-reports a multi-source question by most of its cost. `stream_question` therefore takes
+`gateway` as a *required* keyword and `Final.from_state` takes `cost_usd` rather than deriving
+it: there is no code path that can emit the state's own total. **This is proven offline, not
+live** -- every model call in this corpus is free-tier, so both figures are exactly $0.00 and a
+live comparison would agree for the wrong reason. The proof is the test that sets the state's
+stage cost to 1.0, supplies 99.0, and asserts 99.0 wins.
+
+**A defect in a dependency, worked around at the call site and recorded here.** `build_tools`
+sets `owns_database = database is None` and then fills an absent database from the
+*process-wide* pool, so `SourceTools.close()` closes a pool it does not own. A CLI never
+notices; a server would have the first request's teardown close the pool for every request
+after it. `_default_run` injects `default_database(readonly=True)` explicitly so
+`owns_database` is False. `scripts/ask.py` and `scripts/replay.py` still omit it -- correct for
+a one-shot process, and the reason the semantics were not changed underneath them. A later
+phase should decide whether the ownership rule itself is wrong; until then every server-side
+caller must inject.
+
+**Live evidence.** Against the running stack, `/api/ask/stream` produced 27 lines for one
+question: `run_started`, 12 `stage`, 9 `evidence`, 4 `ping`, and exactly one `final`, with the
+same trace id on the first and last event. The pings fired during a genuine quiet stretch
+rather than a shortened test interval. A SQL-routed question exposed `locator.executed_sql` in
+full and carried the run's trace id on the evidence's own provenance.
+
+**One test was wrong and the live run is what caught it.** The card's fixture asserted
+`locator["query"]`, a key that does not exist; the real locator emits `tables`,
+`executed_sql`, `row_count`. It passed only because the stub agreed with itself. Corrected to
+the real field. A fixture that invents a field name proves nothing about what a client
+receives, which is the whole point of this card.
+
+**Deferred, with the reason.** C-9.4 (source-browser endpoints) and C-9.5 (cancellation) wait
+until C-10 has a consumer for them, and the SPA mount waits for a `frontend/dist` that exists
+-- a mount pointing at a missing directory is the failing entry point C-8.13 deleted two of.
+Authentication, CORS beyond local development, and rate limiting are out of scope for a
+single-operator demo rather than deferred.
