@@ -24,6 +24,7 @@ from typing import Any
 
 import pytest
 
+import vericlaim.orchestrator.nodes.sufficiency as sufficiency_module
 from vericlaim.evidence import (
     Evidence,
     EvidenceSet,
@@ -37,10 +38,20 @@ from vericlaim.orchestrator.nodes.sufficiency import (
     SUFFICIENCY_SCHEMA,
     SUFFICIENCY_SYSTEM_PROMPT,
     SUFFICIENCY_TASK,
+    _counted_gaps,
     sufficiency,
 )
-from vericlaim.orchestrator.sources import SOURCES_FILE, load_capabilities
-from vericlaim.orchestrator.state import MAX_REPLANS, GraphState, RoutingDecision
+from vericlaim.orchestrator.sources import (
+    SOURCES_FILE,
+    SourceCapability,
+    load_capabilities,
+)
+from vericlaim.orchestrator.state import (
+    MAX_REPLANS,
+    GraphState,
+    RoutingDecision,
+    StageRecord,
+)
 from vericlaim.sql.contexts import load_contexts
 
 QUESTION = "What does the wording say, and how often did it happen?"
@@ -183,6 +194,190 @@ def test_nothing_at_all_coming_back_needs_no_assessment() -> None:
 
     assert gateway.calls == []
     assert state.sufficiency["sufficient"] is False
+
+
+def test_a_silent_gap_names_the_sub_goal_it_was_given(monkeypatch: Any) -> None:
+    source = "source_alpha"
+    goal = "Find the requested synthetic measurement."
+    monkeypatch.setattr(sufficiency_module, "load_capabilities", lambda: {}, raising=False)
+    before = state_with([], sources=(source,), silent=[source])
+    state = sufficiency(
+        before.with_(
+            plans={
+                "sub_goals": {
+                    source: {"goal": goal, "expected_evidence": "A measurement."}
+                }
+            }
+        ),
+        gateway=FakeGateway(payload()),
+    )
+
+    assert goal in state.sufficiency["gaps"][0]
+
+
+def test_a_silent_gap_names_the_sources_declared_limits(monkeypatch: Any) -> None:
+    source = "source_alpha"
+    limits = ("synthetic event totals", "synthetic external records")
+    capability = SourceCapability(
+        name=source,
+        tool="synthetic_tool",
+        title="Synthetic source",
+        holds="Synthetic facts.",
+        answers=("synthetic facts",),
+        cannot_answer=limits,
+        citation="synthetic locator",
+    )
+    monkeypatch.setattr(
+        sufficiency_module,
+        "load_capabilities",
+        lambda: {source: capability},
+        raising=False,
+    )
+
+    state = sufficiency(
+        state_with([], sources=(source,), silent=[source]),
+        gateway=FakeGateway(payload()),
+    )
+
+    gap = state.sufficiency["gaps"][0]
+    assert all(limit in gap for limit in limits)
+
+
+def test_a_failed_gap_names_its_sub_goal_and_recorded_reason(monkeypatch: Any) -> None:
+    source = "source_alpha"
+    goal = "Find the requested synthetic total."
+    failure_reason = "synthetic transport timeout"
+    monkeypatch.setattr(sufficiency_module, "load_capabilities", lambda: {}, raising=False)
+    before = state_with([], sources=(source,), failed=[source])
+    state = sufficiency(
+        before.with_(
+            plans={
+                "sub_goals": {
+                    source: {"goal": goal, "expected_evidence": "A total."}
+                }
+            },
+            stages=(StageRecord(name=f"source.{source}", error=failure_reason),),
+        ),
+        gateway=FakeGateway(payload()),
+    )
+
+    gap = state.sufficiency["gaps"][0]
+    assert goal in gap
+    assert failure_reason in gap
+
+
+def test_a_failed_gap_names_the_sources_declared_limits(monkeypatch: Any) -> None:
+    source = "source_alpha"
+    limits = ("synthetic event totals", "synthetic external records")
+    capability = SourceCapability(
+        name=source,
+        tool="synthetic_tool",
+        title="Synthetic source",
+        holds="Synthetic facts.",
+        answers=("synthetic facts",),
+        cannot_answer=limits,
+        citation="synthetic locator",
+    )
+    monkeypatch.setattr(
+        sufficiency_module,
+        "load_capabilities",
+        lambda: {source: capability},
+        raising=False,
+    )
+
+    state = sufficiency(
+        state_with([], sources=(source,), failed=[source]),
+        gateway=FakeGateway(payload()),
+    )
+
+    gap = state.sufficiency["gaps"][0]
+    assert all(limit in gap for limit in limits)
+
+
+@pytest.mark.parametrize(
+    ("has_sub_goal", "has_capability"),
+    [(False, True), (True, False)],
+)
+def test_a_counted_gap_omits_missing_details_cleanly(
+    monkeypatch: Any, has_sub_goal: bool, has_capability: bool
+) -> None:
+    source = "source_alpha"
+    capability = SourceCapability(
+        name=source,
+        tool="synthetic_tool",
+        title="Synthetic source",
+        holds="Synthetic facts.",
+        answers=("synthetic facts",),
+        cannot_answer=("synthetic event totals",),
+        citation="synthetic locator",
+    )
+    monkeypatch.setattr(
+        sufficiency_module,
+        "load_capabilities",
+        lambda: {source: capability} if has_capability else {},
+        raising=False,
+    )
+    plans = (
+        {"sub_goals": {source: {"goal": "Find a synthetic fact."}}}
+        if has_sub_goal
+        else {"sub_goals": {"source_peer": {"goal": "Find a peer fact."}}}
+    )
+    before = state_with([], sources=("source_peer",), silent=[source])
+
+    state = sufficiency(
+        before.with_(plans=plans),
+        gateway=FakeGateway(payload()),
+    )
+
+    assert len(state.sufficiency["gaps"]) == 1
+    gap = state.sufficiency["gaps"][0]
+    assert gap.startswith(f"{source} ")
+    assert '""' not in gap
+    assert "''" not in gap
+    assert "None" not in gap
+    if not has_sub_goal:
+        assert "assigned sub-goal" not in gap
+    if not has_capability:
+        assert "declared cannot answer" not in gap
+
+
+def test_a_source_that_returned_evidence_produces_no_counted_gap(
+    monkeypatch: Any,
+) -> None:
+    source = "source_alpha"
+
+    def unexpected_capability_load() -> None:
+        raise AssertionError("capabilities are irrelevant when no source is silent")
+
+    monkeypatch.setattr(
+        sufficiency_module, "load_capabilities", unexpected_capability_load, raising=False
+    )
+    state = state_with([], sources=(source,)).with_(
+        collection={
+            "by_source": {source: 1},
+            "sources_used": [source],
+            "silent_sources": [],
+            "failed_sources": [],
+        }
+    )
+
+    assert _counted_gaps(state) == []
+
+
+def test_counted_gaps_are_still_joined_into_the_retry_hint(monkeypatch: Any) -> None:
+    first = "source_alpha"
+    second = "source_beta"
+    monkeypatch.setattr(sufficiency_module, "load_capabilities", lambda: {}, raising=False)
+    before = state_with([], sources=(first, second), silent=[first], failed=[second])
+
+    state = sufficiency(before, gateway=FakeGateway(payload()))
+
+    assert len(state.sufficiency["gaps"]) == 2
+    assert state.sufficiency["retry_hint"] == "; ".join(state.sufficiency["gaps"])
+    failed_gap = state.sufficiency["gaps"][1]
+    assert "failure reason" not in failed_gap
+    assert '""' not in failed_gap
+    assert "None" not in failed_gap
 
 
 # ------------------------------------------------------------------ the assessment

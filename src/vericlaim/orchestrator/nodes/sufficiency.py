@@ -37,6 +37,7 @@ from vericlaim.gateway.types import (
     PaidFallbackBlockedError,
     QuotaExhaustedError,
 )
+from vericlaim.orchestrator.sources import load_capabilities
 from vericlaim.orchestrator.state import GraphState, StageRecord
 from vericlaim.tracing import traced
 
@@ -157,14 +158,53 @@ def _counted_gaps(state: GraphState) -> list[str]:
     a part of the plan produced nothing.
     """
     collection = state.collection
-    gaps = [
-        f"{source} was asked for its part of the question and returned nothing"
-        for source in collection.get("silent_sources") or ()
-    ]
-    gaps += [
-        f"{source} could not be reached, so its part of the question is unevidenced"
-        for source in collection.get("failed_sources") or ()
-    ]
+    sub_goals = state.plans.get("sub_goals") or {}
+    silent_sources = collection.get("silent_sources") or ()
+    failed_sources = collection.get("failed_sources") or ()
+    capabilities = load_capabilities() if silent_sources or failed_sources else {}
+    gaps = []
+    for source in silent_sources:
+        details = []
+        goal = str((sub_goals.get(source) or {}).get("goal") or "").strip()
+        if goal:
+            details.append(f"assigned sub-goal: {goal}")
+        capability = capabilities.get(source)
+        if capability:
+            details.append(
+                "declared cannot answer: " + ", ".join(capability.cannot_answer)
+            )
+        detail = f" ({'; '.join(details)})" if details else ""
+        gaps.append(
+            f"{source} was asked for its part of the question and returned nothing"
+            f"{detail}"
+        )
+
+    for source in failed_sources:
+        details = []
+        goal = str((sub_goals.get(source) or {}).get("goal") or "").strip()
+        if goal:
+            details.append(f"assigned sub-goal: {goal}")
+        capability = capabilities.get(source)
+        if capability:
+            details.append(
+                "declared cannot answer: " + ", ".join(capability.cannot_answer)
+            )
+        prefix = f"source.{source}: "
+        failure_reason = next(
+            (
+                failure[len(prefix) :].strip()
+                for failure in reversed(state.failures)
+                if failure.startswith(prefix)
+            ),
+            "",
+        )
+        if failure_reason:
+            details.append(f"failure reason: {failure_reason}")
+        detail = f" ({'; '.join(details)})" if details else ""
+        gaps.append(
+            f"{source} could not be reached, so its part of the question is unevidenced"
+            f"{detail}"
+        )
     return gaps
 
 

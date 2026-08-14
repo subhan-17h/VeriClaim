@@ -265,6 +265,9 @@ visible.
             Blocked on C-8.14: the first live run answered two sources of four.
 - [x] **C-8.14** Scope the entity resolver's ambiguity refusal to the sub-goal the source was
       actually asked, so a mention belonging to another clause cannot abort a source. — `N`
+- [x] **C-8.15** Make a counted gap say what the source was asked and what it declares it
+      cannot answer, so the replan loop can correct a mis-assigned sub-goal instead of
+      rephrasing it. — `N`
 
 **Acceptance:** ten runs recorded and their differences named; a source tool receives the
 run's understanding; the flagship question resolves citations from all four sources.
@@ -987,3 +990,45 @@ ambiguity raising `UnanswerableQuestionError` on the old source, reproducing the
 exact shape offline at zero quota. **Two pass in both directions by design**: that `scope=None`
 still gates every mention, and that an in-scope ambiguity still refuses with the same question.
 Those two guard the halves that must NOT change. **1456 passed, 77 deselected**; ruff clean.
+
+### C-8.15 - let a counted gap explain itself
+
+**Found by the second flagship run.** With C-8.14 in, three sources of four answered. The
+workbook source did not, and the reason had changed: it was handed a sub-goal about per-event
+transaction counts -- something its own `cannot_answer` in `contexts/sources.yaml` covers -- and
+correctly refused.
+
+**What it is not.** Not the contexts: the workbook entry states plainly that it answers what
+target or threshold was set for a period, and that it cannot answer the underlying events one
+row per occurrence. Not the model tier: `plan` already runs on `strong`. Not the prompt's
+content: it says in as many words never to ask a source for something its `cannot_answer`
+covers. The planner was given the right description and disregarded it.
+
+**Root cause.** The plan is model-authored and only checked for arity. `_plan` verifies that
+each routed source gets exactly one sub-goal and that none is left unasked, but nothing checks
+that a sub-goal suits the source it was handed to. A mis-assignment therefore passes straight
+through, the source refuses, and the result is an evidence gap indistinguishable from a source
+that genuinely held nothing.
+
+**Why three replans did not correct it.** `_counted_gaps` emitted only "<source> was asked for
+its part of the question and returned nothing", and that string is the whole of `retry_hint`.
+The planner learned that a source came back empty and never what it had been asked or what that
+source covers, so it rephrased the same wrong request three times. The three near-identical
+recorded failures are that loop, verbatim.
+
+**What changed.** A counted gap now carries the sub-goal the source was actually given, the
+`cannot_answer` it declares, and -- for an unreachable source -- the recorded failure reason.
+Each part is omitted cleanly when absent. No model call was added: this path is deliberately
+model-free and stays so. No prompt changed; capabilities already reach the planner as data in
+the user message, and the hint is data on the same footing.
+
+**Evidence.** Eight tests. Reverting the source file fails **four**: that a silent gap names its
+sub-goal and its declared limits, and that a failed gap names its sub-goal, its declared limits
+and its recorded reason. The remaining four pass in both directions by design -- they guard the
+halves that must not change: the two missing-detail cases degrading to one readable sentence, a
+source that returned evidence producing no gap, and the hint still being the gaps joined with
+"; ". **1464 passed, 77 deselected**; ruff clean; no quota spent.
+
+**One thing left plain rather than tidied.** The two branches build their shared details with
+duplicated lines. A helper would collapse them; it was not worth another round to save ten lines
+in a function that reads clearly as it stands.
