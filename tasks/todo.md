@@ -334,6 +334,10 @@ a question for C-11.2's coverage scorer over 40-60 goldens, not for one question
 - [x] **C-9.3** **Expose the trace and the executed SQL** (neither reference repo does). — `N`
 - [ ] **C-9.4** Source-browser endpoints incl. `#page=N` anchoring. — `A` CSRS
 - [ ] **C-9.5** Client cancellation. — `N`
+- [x] **C-9.6** Settle the three data-contract questions C-10.1 inherits, before generated
+      types make them expensive: keep `EvidenceEvent.items` a list so batching stays a
+      non-breaking change; type only the shapes that have a contract; and stop the state
+      publishing a run cost it cannot know. — `N`
 
 ## Phase C-10 — Frontend
 
@@ -1382,3 +1386,39 @@ Corpus, loader, tool registry, reliability work and the flagship demonstration. 
 beyond the original five, every one of them a defect found by running the thing rather than
 by reading it. The phase closes with the four-clause question answered from all four
 sources, verified, undegraded, and at a cost of two-tenths of a cent.
+
+### C-9.6 - the contract decisions, settled before they got expensive
+
+Three questions were parked for C-10.1 to answer. Settling them first is deliberate: they
+become generated TypeScript, and a protocol change after a client is generated against it
+is a migration rather than an edit.
+
+**`EvidenceEvent.items` stays a list**, though it has exactly one emission site and always
+carries exactly one item. A run emits one event per item -- 35 to 46 on a four-source
+question -- so batching per source is a plausible optimisation, and a list makes that a
+non-breaking change. Clients iterate either way.
+
+**Only the shapes that have a contract get typed.** The five events, evidence items,
+locators, stages and citations are what the UI renders and what Python actually validates.
+`understanding`, `plans`, `collection` and `sufficiency` are loose dicts no schema governs;
+typing them by hand would invent a contract that drifts the first time a node changes what
+it records.
+
+**The state no longer publishes a run cost.** `GraphState.total_cost_usd` summed stage
+records, and a source tool's own model calls reach no stage -- so it read `$0.00` on a run
+that really cost `$0.0024`. That is not an incomplete number, it is a wrong one, and it was
+the number the CLI's `--json` published. The property and the `to_dict()` key are gone; the
+gateway ledger is the only source of a total, and every caller that has one supplies it:
+the API through `Final.from_state`, the CLI by merging it into its dump, the trace through
+`_trace_run(cost_usd=...)`, which omits the attribute entirely rather than guess when no
+ledger is available.
+
+**Per-stage costs stay, because they are correct.** A stage records what its own model call
+cost and that figure is right; only the sum was wrong. An earlier framing of this card
+called the per-stage figure uncomputable, which would have meant stripping the field from
+every orchestrator node, tracing, and nineteen test files -- deleting accurate data to fix
+an inaccurate aggregate. Threading tool-internal spend onto the stage that invoked the tool
+remains the better end state, and belongs with C-10.6 where a panel would consume it.
+
+Offline suite 1509 passed, 77 deselected; ruff clean. Live, `--json` now carries a
+ledger-sourced `cost_usd` and the API's final event is unchanged.

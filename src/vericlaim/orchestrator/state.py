@@ -161,9 +161,12 @@ class GraphState(BaseModel):
 
     # -- reading -----------------------------------------------------------
 
-    @property
-    def total_cost_usd(self) -> float:
-        return sum(stage.cost_usd for stage in self.stages)
+    # No total_cost_usd. A stage records what its own model call cost and that figure is
+    # right, but summing them is not a run's cost: the model calls a source tool makes
+    # reach no stage, so the sum omitted most of a multi-source question's spend and read
+    # $0.00 on a run that really cost $0.0024. The gateway ledger holds the only true
+    # total, so the state declines to publish one and every caller that has a ledger
+    # supplies it. A number that is always wrong is worse than no number.
 
     @property
     def total_latency_ms(self) -> float:
@@ -204,7 +207,6 @@ class GraphState(BaseModel):
             "stages": [stage.model_dump() for stage in self.stages],
             "failures": list(self.failures),
             "replans": self.replans,
-            "cost_usd": self.total_cost_usd,
             "latency_ms": self.total_latency_ms,
             "trace_id": self.trace_id,
         }

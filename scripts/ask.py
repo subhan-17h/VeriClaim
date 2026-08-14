@@ -168,6 +168,7 @@ def main() -> int:
             state = run_question(
                 build_graph(tools=registry, capabilities=capabilities, gateway=gateway),
                 args.question,
+                gateway=gateway,
                 config={"recursion_limit": args.recursion_limit},
             )
     except DatabaseUnavailableError as exc:
@@ -184,7 +185,10 @@ def main() -> int:
         return 1
 
     if args.json:
-        print(json.dumps(state.to_dict(), indent=2, default=str))
+        # The state cannot know what the run cost, so the ledger's figure is added here
+        # -- the same figure, from the same place, that the API's final event carries.
+        payload = state.to_dict() | {"cost_usd": gateway.ledger.total_cost_usd}
+        print(json.dumps(payload, indent=2, default=str))
     else:
         _report(state, gateway)
     return _exit_code(state)

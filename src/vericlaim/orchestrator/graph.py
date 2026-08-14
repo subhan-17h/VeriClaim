@@ -159,18 +159,27 @@ def build_graph(
 
 
 @traced("vericlaim.question", run_type="chain", tags=["orchestrator"])
-def run_question(graph: Any, question: str, **config: Any) -> GraphState:
+def run_question(
+    graph: Any, question: str, *, gateway: Any | None = None, **config: Any
+) -> GraphState:
     """Run one question through a compiled graph and return the finished state.
 
     One question is one trace. The root span is opened here rather than around the graph
     invocation inside it, so the run tree covers the whole question -- including the
     validation that rejects a blank one before any model is reached.
+
+    ``gateway`` is optional here, unlike in :func:`stream_question`, because this returns
+    the state rather than a cost-bearing event: supplying it only lets the trace record
+    what the run really cost. Without it the trace omits cost rather than guessing.
     """
     # Constructed rather than passed as a dict so a blank question fails here, before a
     # model is called, with the same error every other entry point gives.
     start = GraphState(question=question, trace_id=uuid.uuid4().hex)
     state = GraphState(**graph.invoke(start, **config))
-    _trace_run(state)
+    _trace_run(
+        state,
+        cost_usd=None if gateway is None else gateway.ledger.total_cost_usd,
+    )
     return state
 
 
@@ -217,15 +226,20 @@ def stream_question(
         raise RuntimeError("The graph produced no state, so there is nothing to report")
 
     state = GraphState(**last)
-    _trace_run(state)
+    _trace_run(state, cost_usd=gateway.ledger.total_cost_usd)
     yield Final.from_state(state, cost_usd=gateway.ledger.total_cost_usd)
 
 
-def _trace_run(state: GraphState) -> None:
+def _trace_run(state: GraphState, *, cost_usd: float | None = None) -> None:
     """Summarize the finished run on the root span.
 
     What a reader of the trace wants first: which sources were consulted, what it cost,
     whether the answer was checked, and whether the graph went round again.
+
+    ``cost_usd`` comes from the gateway ledger, because the state cannot know it -- a
+    source tool's own model calls reach no stage. A caller without a ledger passes
+    nothing and the attribute is omitted, which is the honest outcome: a trace that says
+    nothing about cost is better than one asserting a total that is mostly missing.
     """
     add_run_metadata(
         vc_trace_id=state.trace_id,
@@ -236,8 +250,8 @@ def _trace_run(state: GraphState) -> None:
         vc_verified=bool(state.citations.get("verified")),
         vc_degraded=bool(state.citations.get("degraded")),
         vc_failures=list(state.failures),
-        vc_cost_usd=round(state.total_cost_usd, 6),
         vc_latency_ms=round(state.total_latency_ms, 2),
+        **({} if cost_usd is None else {"vc_cost_usd": round(cost_usd, 6)}),
     )
 
 

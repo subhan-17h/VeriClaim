@@ -88,9 +88,11 @@ class Final:
     def from_state(cls, state: GraphState, *, cost_usd: float) -> Final:
         """Build the final payload, with the cost supplied rather than derived.
 
-        ``GraphState.total_cost_usd`` sums stage records, and the model calls a source
-        tool makes are recorded on no stage. Deriving the cost here would under-report
-        every multi-source question, so the caller passes the gateway ledger's figure.
+        The state publishes no cost of its own: a stage records only what its own model
+        call cost, and the calls a source tool makes are recorded on no stage, so any
+        total derived from stages under-reports a multi-source question -- it read $0.00
+        on a run that cost $0.0024. The caller passes the gateway ledger's figure, which
+        is the only true one.
         """
         payload = state.to_dict()
         payload["cost_usd"] = cost_usd

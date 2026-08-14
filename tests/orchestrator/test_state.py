@@ -75,14 +75,29 @@ def test_the_same_finding_from_the_same_place_is_not_counted_twice() -> None:
     assert len(state.evidence.items) == 1
 
 
-def test_cost_accumulates_rather_than_being_overwritten() -> None:
+def test_latency_accumulates_rather_than_being_overwritten() -> None:
     state = GraphState(question="Is it covered?")
 
     state = state.with_stage(StageRecord(name="route", cost_usd=0.001, latency_ms=120))
     state = state.with_stage(StageRecord(name="plan", cost_usd=0.004, latency_ms=900))
 
-    assert state.total_cost_usd == pytest.approx(0.005)
     assert state.total_latency_ms == pytest.approx(1020)
+
+
+def test_the_state_never_publishes_a_cost_it_cannot_know() -> None:
+    """A stage records what its own model call cost, and that figure is right. Summing
+    them is not: the model calls a source tool makes reach no stage, so the total omits
+    most of a multi-source question's spend -- it read $0.00 on a run that cost $0.0024.
+    The only true total is the gateway ledger's, so the state declines to publish one and
+    every caller that has a ledger supplies it.
+    """
+    state = GraphState(question="Is it covered?")
+    state = state.with_stage(StageRecord(name="route", cost_usd=0.001, latency_ms=120))
+
+    assert "cost_usd" not in state.to_dict()
+    assert not hasattr(state, "total_cost_usd")
+    # The per-stage figure is accurate and stays.
+    assert state.stages[0].cost_usd == pytest.approx(0.001)
 
 
 def test_every_stage_stays_on_the_trace_in_the_order_it_ran() -> None:
@@ -143,4 +158,7 @@ def test_the_whole_run_can_be_handed_to_the_api() -> None:
     assert payload["question"] == "Is it covered?"
     assert payload["evidence"][0]["citation"]
     assert payload["stages"][0]["name"] == "route"
-    assert payload["cost_usd"] == pytest.approx(0.001)
+    # The per-stage cost travels; the run total does not, because the state cannot know
+    # it. Final.from_state supplies the ledger's figure to the client.
+    assert payload["stages"][0]["cost_usd"] == pytest.approx(0.001)
+    assert "cost_usd" not in payload
