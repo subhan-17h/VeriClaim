@@ -14,17 +14,24 @@ import json
 import queue
 import threading
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import Body, FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, field_validator
 from starlette.responses import StreamingResponse
 
 from vericlaim.api.protocol import Error, Event, Final
+from vericlaim.config import PROJECT_ROOT
 from vericlaim.orchestrator.tools import open_tools
 
 PING: dict[str, Any] = {"event": "ping"}
 PING_INTERVAL_S = 10.0
+
+#: Where ``npm run build`` writes. Absent until the frontend has been built, which is
+#: the normal state of a fresh checkout and of any machine without Node.
+SPA_DIST = PROJECT_ROOT / "frontend" / "dist"
 
 # Sentinel closing the queue the worker thread feeds.
 _DONE = object()
@@ -111,8 +118,15 @@ def _events(run: Callable[..., Iterator[Event]], question: str) -> Iterator[str]
         yield _ndjson(item.to_json())
 
 
-def create_app(run: Callable[..., Iterator[Event]] | None = None) -> FastAPI:
-    """Build the application. ``run`` is injectable so the transport is testable alone."""
+def create_app(
+    run: Callable[..., Iterator[Event]] | None = None,
+    dist: Path | None = None,
+) -> FastAPI:
+    """Build the application. ``run`` is injectable so the transport is testable alone.
+
+    ``dist`` is injectable so both sides of the SPA mount can be tested without a Node
+    build ever having happened.
+    """
     execute = run if run is not None else _default_run
     application = FastAPI(title="VeriClaim")
 
@@ -136,6 +150,14 @@ def create_app(run: Callable[..., Iterator[Event]] | None = None) -> FastAPI:
                 status_code=500, detail="The run produced no answer to return"
             )
         return final.payload
+
+    # Mounted last, and only when built. StaticFiles raises on a missing directory, so
+    # an unconditional mount would stop the API importing in any checkout that has not
+    # run `npm run build` -- including every machine without Node. Registering after
+    # the routes is what stops a catch-all at "/" swallowing /api.
+    spa = SPA_DIST if dist is None else dist
+    if (spa / "index.html").is_file():
+        application.mount("/", StaticFiles(directory=spa, html=True), name="spa")
 
     return application
 

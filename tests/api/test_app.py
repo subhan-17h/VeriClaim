@@ -206,3 +206,43 @@ def test_the_first_streamed_event_carries_the_same_trace_as_the_final() -> None:
     events = _lines(_client(stub).post("/api/ask/stream", json={"question": "q"}))
 
     assert events[0]["trace_id"] == events[-1]["trace_id"] == "trace-abc"
+
+
+class TestTheSpaMount:
+    """The API must run from a checkout that has never been built.
+
+    StaticFiles raises when its directory is absent, so mounting unconditionally would
+    make an unbuilt clone fail to import -- the same "declared thing that fails" that
+    C-8.13 deleted two entry points for.
+    """
+
+    def test_the_api_works_when_the_frontend_was_never_built(self, tmp_path) -> None:
+        app = create_app(run=StubRun([_final()]), dist=tmp_path / "absent")
+
+        response = TestClient(app).post("/api/ask", json={"question": "is it covered?"})
+
+        assert response.status_code == 200
+        assert response.json()["answer"] == "an answer"
+
+    def test_the_built_spa_is_served_at_the_root(self, tmp_path) -> None:
+        dist = tmp_path / "dist"
+        dist.mkdir()
+        (dist / "index.html").write_text("<!doctype html><title>VeriClaim</title>")
+
+        app = create_app(run=StubRun([_final()]), dist=dist)
+        response = TestClient(app).get("/")
+
+        assert response.status_code == 200
+        assert "VeriClaim" in response.text
+
+    def test_the_mount_never_shadows_the_api(self, tmp_path) -> None:
+        """Registered last, so a catch-all at / cannot swallow /api routes."""
+        dist = tmp_path / "dist"
+        dist.mkdir()
+        (dist / "index.html").write_text("<!doctype html><title>VeriClaim</title>")
+
+        app = create_app(run=StubRun([_final()]), dist=dist)
+        response = TestClient(app).post("/api/ask", json={"question": "is it covered?"})
+
+        assert response.status_code == 200
+        assert response.json()["answer"] == "an answer"
