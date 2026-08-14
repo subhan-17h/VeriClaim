@@ -39,10 +39,6 @@ dependencies = [
     "python-dotenv>=1.0.1",
 ]
 
-[project.scripts]
-vericlaim-api = "vericlaim.api.app:main"
-vericlaim = "vericlaim.cli:main"
-
 [dependency-groups]
 dev = [
     "ruff>=0.8.0",
