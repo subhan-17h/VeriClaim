@@ -120,6 +120,14 @@ def synthesize(
 
     from vericlaim.config import get_settings
 
+    # A plan that declines after collection still records what the evidence could not
+    # establish. Preserve that finding for the prompt's SAY WHAT IS MISSING obligation.
+    known_gaps = list(state.sufficiency.get("gaps") or ())
+    if state.plans and not state.plans.get("answerable"):
+        unanswerable_reason = str(state.plans.get("unanswerable_reason") or "")
+        if unanswerable_reason.strip() and unanswerable_reason not in known_gaps:
+            known_gaps.append(unanswerable_reason)
+
     payload = {
         "question": state.question,
         "expected_answer_shape": state.plans.get("expected_answer_shape", ""),
@@ -128,7 +136,7 @@ def synthesize(
             low_confidence_floor=get_settings().ocr_confidence_floor
         ),
         "unreachable_sources": list(state.collection.get("failed_sources") or ()),
-        "known_gaps": list(state.sufficiency.get("gaps") or ()),
+        "known_gaps": known_gaps,
         # Set only on a second attempt, by verification, naming what was wrong with the
         # first one. Empty on the first pass.
         "correction": correction,
@@ -175,7 +183,14 @@ def _refusal(state: GraphState) -> tuple[str, str] | None:
         return "out_of_scope", routing.reason
     if routing.needs_clarification:
         return "needs_clarification", routing.clarification_question or routing.reason
-    if state.plans and not state.plans.get("answerable"):
+    # The first answerable decision precedes evidence; replanning writes the same field
+    # when no further work can close a gap. Refusing then trades evidence for uncited prose
+    # verification rejects; known_gaps and unreachable_sources report partial coverage.
+    if (
+        state.plans
+        and not state.plans.get("answerable")
+        and not state.evidence.items
+    ):
         return "unanswerable", str(state.plans.get("unanswerable_reason") or "")
     if not state.evidence.items:
         return "no_evidence", _nothing_found(state)

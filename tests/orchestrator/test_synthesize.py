@@ -255,6 +255,34 @@ def test_a_question_the_planner_declined_is_answered_with_its_reason() -> None:
     assert "figure for pay" in state.answer
 
 
+def test_a_later_plan_decline_does_not_discard_collected_evidence() -> None:
+    gateway = FakeGateway()
+
+    state = synthesize(state_with(answerable=False), gateway=gateway)
+
+    assert gateway.calls
+    assert state.answer == ANSWER
+    assert "refused" not in state.stages[-1].detail
+
+
+def test_a_later_plan_decline_is_preserved_as_a_known_gap() -> None:
+    gateway = FakeGateway()
+
+    synthesize(state_with(answerable=False), gateway=gateway)
+
+    assert gateway.calls
+    assert sent_payload(gateway)["known_gaps"] == ["No source holds a figure for pay."]
+
+
+def test_a_plan_decline_without_evidence_still_refuses_without_a_model_call() -> None:
+    gateway = FakeGateway()
+
+    state = synthesize(state_with([], answerable=False), gateway=gateway)
+
+    assert gateway.calls == []
+    assert state.stages[-1].detail == {"refused": "unanswerable", "cited": []}
+
+
 def test_no_evidence_at_all_produces_a_refusal_rather_than_an_answer() -> None:
     """Nothing to cite means nothing to say. A model given an empty evidence block
     writes from what it already believes, which is precisely the failure mode this
