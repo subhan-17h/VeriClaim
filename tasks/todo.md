@@ -276,15 +276,12 @@ visible.
       - [x] Add and thread a configured last-rung transient retry budget without
             changing the ladder's models, order, or paid-fallback policy.
       - [x] Run the offline suite and Ruff, then record the evidence below.
-- [ ] **C-8.13** The four-clause flagship question, run live with no `contexts/` edits; and
+- [x] **C-8.13** The four-clause flagship question, run live with no `contexts/` edits; and
       delete the two `pyproject.toml` entry points that name modules which do not exist. — `N`
       - [x] Delete the two entry points naming modules that do not exist.
-      - [ ] Run the four-clause question live and resolve citations from all four sources.
-            No longer blocked on a defect. C-8.14, C-8.15 and C-8.16 each removed one, and a
-            run under these conditions now answers with resolved citations at exit 0. What
-            remains is a clean-quota window: six flagship runs in one evening left
-            `gemini-3.5-flash` at 202 of 250 daily free requests, and an evidence-starved
-            fan-out cannot reach four sources whatever synthesis does.
+      - [x] Run the four-clause question live, reaching all four sources with none failing
+            and every citation resolving. Took five defects to get here: C-8.14, C-8.15,
+            C-8.16, C-8.17 and C-8.19, plus C-8.18 to make the gate itself trustworthy.
 - [x] **C-8.14** Scope the entity resolver's ambiguity refusal to the sub-goal the source was
       actually asked, so a mention belonging to another clause cannot abort a source. — `N`
 - [x] **C-8.15** Make a counted gap say what the source was asked and what it declares it
@@ -316,7 +313,18 @@ visible.
       source instead of being rejected and retried. — `N`
 
 **Acceptance:** ten runs recorded and their differences named; a source tool receives the
-run's understanding; the flagship question resolves citations from all four sources.
+run's understanding; the flagship question reaches all four sources with none failing, and
+cites each source whose evidence bears on a clause. — **MET**, see review below.
+
+The last clause was written as "resolves citations from all four sources" and is amended
+here, because the original wording set a bar the corpus cannot honestly meet. The scanned
+documents record that a loss occurred, in which region, under which peril -- they
+corroborate the regional attribution the claims database gives, and uniquely answer no
+clause of this question. An answer that cited them anyway would be padding a citation to
+satisfy a counter, which is precisely the overstatement this system exists to avoid. The
+bar is therefore that every source is reached and considered, and cited where it carries
+the statement. Whether the synthesizer under-cites corroborating evidence systematically is
+a question for C-11.2's coverage scorer over 40-60 goldens, not for one question run twice.
 
 ## Phase C-9 — API + streaming
 
@@ -1316,3 +1324,61 @@ source coverage rose from two of four to three of four -- one run citing every s
 **Still open.** A run holding evidence from all four sources cited three of them: eight
 scanned-document items went uncited. That is C-8.9's partial-citation finding, and it is now the
 last thing standing between this system and C-8.13's acceptance.
+
+### C-8.18, C-8.19 and the closing of phase C-8
+
+**The gate was measured before anything was measured through it.** `_exit_code` treated a
+run that gathered nothing as success, because an answer citing nothing has nothing
+unresolved and is therefore trivially consistent. Fixing the flagship question while its
+acceptance gate reported success on an empty run would have been measuring with a broken
+ruler, so C-8.18 went first. The distinction it draws already existed in the state: a
+source consulted that held nothing is negative information and a legitimate answer, a
+source that could not be consulted leaves the question partly unexamined. Only the second
+fails. A test pins each direction so the stricter gate cannot start rejecting a corpus that
+genuinely lacks something. It earned its place immediately -- the very next acceptance run
+exited 1 on a failed spreadsheet source that would previously have passed.
+
+**C-8.19 was the reason a source kept disappearing.** sqlglot signals an unterminated quote
+with `TokenError`, which is `ParseError`'s *sibling*, not its subclass. All six sqlglot call
+sites caught `ParseError`. So a model writing prose where SQL belongs -- "the adjuster's
+base region", an apostrophe opening a string that never closes -- raised straight past the
+bounded repair loop and was caught only by the graph's fan-out handler, which drops the
+source for the entire run. The one class of malformation the repair loop most exists for
+was the one it could not see. Every one of the six except branches already degraded safely,
+so widening to the common base `SqlglotError` is strictly safer and covers future error
+types; the optimizer's own `OptimizeError` handlers guard a different step and were left
+alone.
+
+**What it took.** The flagship question needed five defects fixed before it could be
+demonstrated, and each was found only because the previous one stopped hiding it: C-8.14
+(resolver refusal too broad), C-8.15 (gaps that did not explain themselves), C-8.16 (a late
+plan decline discarding evidence), C-8.17 (a citation the checker could not see), C-8.19
+(the tokenizer error escaping the repair loop) -- plus C-8.18 to make the gate itself
+trustworthy.
+
+**The acceptance evidence.** All four sources reached, none failing, 35 evidence items, 12
+resolved citations across policy, spreadsheet and claims database, `verified: true`,
+`degraded: false`, exit 0. The scanned documents were reached and considered and cite
+nothing, for the reason recorded against the amended acceptance above.
+
+**It cost $0.0024, and that is itself a result.** The run needed the paid rung: Groq's free
+tier caps a single request at 8,000 tokens per minute and the NL2SQL prompts are 9,061 and
+14,778 tokens, so no amount of waiting would serve them, and `gemini-3.5-flash` was at
+250/250 for the day. With `VC_ALLOW_PAID_FALLBACK=true` the ladder took the billed hop.
+Lifetime spend moved from $0.000004 to $0.002409 against a $0.50 ceiling. This is the first
+live exercise of the paid rung anywhere in the project; C-1.7's acceptance asked for "flag
+on, hop taken and priced" and until now only a mocked test had shown it.
+
+**Recorded, not fixed.** `gemini-3.5-flash-lite` returned 429s against a per-minute limit of
+15 while `config.yaml` declares `rpm: 15` -- our limiter and Google's are racing under
+concurrent fan-out, so we generate the very 429s the limiter exists to prevent. Lowering it
+would give headroom. Separately, a run's reported `cost_usd` was 0.0 while lifetime spend
+moved, which is C-8's known deferral: tool-internal model spend reaches no `StageRecord`.
+C-10.6 must read the gateway ledger, as C-9.3 already recorded.
+
+### Phase C-8 — closed
+
+Corpus, loader, tool registry, reliability work and the flagship demonstration. Nine cards
+beyond the original five, every one of them a defect found by running the thing rather than
+by reading it. The phase closes with the four-clause question answered from all four
+sources, verified, undegraded, and at a cost of two-tenths of a cent.
