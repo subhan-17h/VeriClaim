@@ -1473,3 +1473,20 @@ table.data td.key { color: var(--text); font-weight: 500; font-family: 'Geist Mo
 }
 .ev-score .hbar-track { flex: 1; max-width: 160px; }
 .ev-score-value { font-family: 'Geist Mono', ui-monospace, monospace; color: var(--text-2); }
+
+/* ============================================================
+   Citation chips: the answer's link to its evidence
+   ============================================================ */
+.cite {
+  display: inline-block; vertical-align: baseline;
+  font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px;
+  line-height: 1.5; padding: 0 6px; margin: 0 2px;
+  color: var(--cyan); background: var(--cyan-soft);
+  border: 1px solid var(--cyan-ring); border-radius: 999px;
+  cursor: pointer; transition: background .15s var(--ease);
+}
+.cite:hover { background: var(--cyan-ring); }
+.cite.missing {
+  color: #FCA5A5; background: rgba(248,113,113,.10);
+  border-color: rgba(248,113,113,.30); cursor: default;
+}
