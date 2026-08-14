@@ -47,6 +47,24 @@ so the C-1 ladder would have retried, fallen through to OpenAI, and **started bi
 names `VC_ALLOW_PAID_FALLBACK`; flag on → hop taken and priced; loop past the ceiling →
 `BudgetExceededError`.
 
+### Third-provider addendum (2026-08-14)
+
+Gemini's free tier is the binding constraint on everything downstream: one flagship run spends
+about sixteen `flash` calls, and `flash` allows 250 a day. C-8.13 could not be demonstrated and
+C-11's 40-60 goldens were never going to run at all.
+
+- [x] **C-1.9** Add Groq as a third provider so the free ladder has real headroom, and let a
+      model declare its reasoning budget. — `N`
+      - [x] `GroqProvider` over the OpenAI-compatible transport, so no second SDK enters the
+            dependency set and request handling cannot drift from `OpenAIProvider`'s.
+      - [x] `ModelSpec.reasoning_effort`, forwarded only when set, because the allowed values
+            differ per model and no model name may be hard-coded in Python.
+      - [x] One Groq rung per `cheap`/`mid`/`strong` ladder, between the free Gemini rung and
+            the paid one; `vision` untouched, since no Groq vision model is available here.
+
+**Acceptance:** Gemini exhausts mid-run and the ladder continues on Groq instead of refusing or
+spending; only schema-capable Groq models are reachable.
+
 ## Phase C-2 — The Evidence spine
 
 - [x] **C-2.1** `evidence.py` — frozen `Evidence` + typed locator union (policy / sql / spreadsheet /
@@ -1208,3 +1226,44 @@ against an RPM of 10. C-8.13 now waits on a clean-quota window rather than on a 
 refusal, because an answer citing nothing is trivially consistent and `_exit_code` passes it. A
 run that gathered nothing should not report success to the gate that C-8.13 is measured by.
 Recorded rather than fixed: it is a separate defect in the acceptance gate itself.
+
+### C-1.9 - a third provider, and what the probe decided
+
+**Probed before wiring, and the probe changed the design.** Groq publishes an OpenAI-compatible
+endpoint, so the adapter is a subclass of `OpenAIProvider` and no second SDK enters the
+dependency set. But only three of the account's models support the strict `json_schema` output
+this pipeline runs on -- `openai/gpt-oss-120b`, `openai/gpt-oss-20b` and `qwen/qwen3.6-27b`.
+Everything else returns HTTP 400 for it. `llama-3.1-8b-instant` carries by far the largest
+allowance at 14,400 requests a day and is nonetheless unusable, because `synthesize` is the only
+node in the system that asks for free text; every other node asks for a schema, so no tier is
+free-text-only.
+
+**`reasoning_effort` is load-bearing, not a tuning knob.** `qwen/qwen3.6-27b` fails strict schema
+with `json_validate_failed` and an empty `failed_generation` unless `reasoning_effort: none` is
+sent -- its thinking output was breaking validation. Proved through the real adapter in both
+directions: with the parameter the schema validates, without it the original error returns. The
+gpt-oss models reject `none` and accept `low|medium|high`, and `low` cuts output tokens by about
+60%, which matters because Groq's binding limit is 8,000 tokens per minute rather than requests
+per day. Because the allowed values differ per model, the setting lives on the `ModelSpec` in
+`config.yaml`; hard-coding it against a model name in Python is what the roadmap forbids.
+
+**`include_reasoning` is documented but unusable here.** The OpenAI SDK rejects it client-side
+with `TypeError` before a request is made. It would need `extra_body`, and `reasoning_effort`
+already produces clean output, so it was not added.
+
+**Ladder placement.** Gemini free stays first so earlier measured runs remain comparable, Groq
+free sits second, the paid rung stays last. A different Groq model per tier spends three
+separate 1,000-a-day allowances instead of concentrating on one. `vision` is untouched: this
+account exposes no Groq vision model, and a rung that cannot serve the tier is worse than none.
+
+**Proven live.** During the flagship runs `gemini-3.5-flash` reached exactly 250 of 250 for the
+day and the ladder continued on `groq/qwen/qwen3.6-27b` rather than refusing or spending.
+Lifetime spend unchanged. Offline suite 1502 passed, 77 deselected; ruff clean. A test pins the
+schema-capable allow-list, so adding an unsupported Groq model later fails the suite.
+
+**Two defects this exposed, neither fixed here.** A synthesized answer wrote `[known_gaps]` as
+though it were a citation id -- the model treated the payload's key name as a citable source.
+`\[E(\d+)\]` does not match it, so it is silently dropped rather than reported as malformed, and
+the answer reads as cited where it is not. Separately, `source.sql` failed with
+`Error tokenizing 'he adjuster's base region. Grouped by region name'` -- prose reaching the SQL
+tokenizer with its first character already lost. Both are recorded for their own cards.

@@ -284,6 +284,10 @@ class ModelSpec:
 
     ``rpm``/``rpd`` are the provider's published free-tier limits, enforced
     client-side so we self-throttle instead of generating those 429s.
+
+    ``reasoning_effort`` gives providers that emit reasoning tokens per-model
+    control because the allowed values differ by model. When unset, providers omit
+    it from the request entirely.
     """
 
     provider: str
@@ -298,6 +302,7 @@ class ModelSpec:
     paid: bool = True
     rpm: int | None = None
     rpd: int | None = None
+    reasoning_effort: str | None = None
 
     @property
     def label(self) -> str:
@@ -371,6 +376,11 @@ def _model_spec(raw: dict[str, Any], *, defaults: ModelSpec | None = None) -> Mo
         paid=bool(raw.get("paid", True)),
         rpm=int(raw["rpm"]) if raw.get("rpm") is not None else None,
         rpd=int(raw["rpd"]) if raw.get("rpd") is not None else None,
+        reasoning_effort=(
+            str(raw["reasoning_effort"])
+            if raw.get("reasoning_effort") is not None
+            else None
+        ),
     )
 
 

@@ -15,7 +15,9 @@ from vericlaim.config import ModelSpec
 from vericlaim.gateway import providers as providers_mod
 from vericlaim.gateway.providers import (
     GeminiProvider,
+    GroqProvider,
     OpenAIProvider,
+    available_providers,
     get_provider,
     register_provider,
     strictify_schema,
@@ -29,6 +31,7 @@ from vericlaim.gateway.types import (
 )
 
 OPENAI_SPEC = ModelSpec(provider="openai", model="gpt-4o-mini", timeout_s=12.0)
+GROQ_SPEC = ModelSpec(provider="groq", model="test-model", timeout_s=12.0)
 GEMINI_SPEC = ModelSpec(provider="gemini", model="gemini-2.0-flash", timeout_s=12.0)
 
 SCHEMA = {
@@ -129,6 +132,11 @@ def openai_env(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
 
+@pytest.fixture
+def groq_env(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+
 class TestOpenAIProvider:
     def test_missing_key_is_provider_unavailable(self, monkeypatch):
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -179,6 +187,21 @@ class TestOpenAIProvider:
         parts = fake.payload["messages"][0]["content"]
         assert parts[0]["type"] == "text"
         assert parts[1]["image_url"]["url"].startswith("data:image/png;base64,")
+
+    def test_reasoning_effort_does_not_leak_into_openai_payload(
+        self, monkeypatch, openai_env
+    ):
+        fake = _FakeOpenAIClient()
+        monkeypatch.setattr(providers_mod, "_openai_client", lambda key: fake)
+        spec = ModelSpec(
+            provider="openai",
+            model="gpt-4o-mini",
+            reasoning_effort="low",
+        )
+
+        OpenAIProvider().complete(spec, [Message("user", "q")])
+
+        assert "reasoning_effort" not in fake.payload
 
     @pytest.mark.parametrize(
         "exc",
@@ -239,6 +262,48 @@ class TestOpenAIProvider:
             OpenAIProvider().complete(OPENAI_SPEC, [Message("user", "q")])
         assert info.value.provider == "openai"
         assert info.value.model == "gpt-4o-mini"
+
+
+# ----------------------------------------------------------------------------- Groq
+
+
+class TestGroqProvider:
+    def test_missing_key_is_provider_unavailable(self, monkeypatch):
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        with pytest.raises(ProviderUnavailableError, match="GROQ_API_KEY"):
+            GroqProvider()._client(GROQ_SPEC)
+
+    def test_client_uses_groq_openai_compatible_endpoint(self, monkeypatch):
+        monkeypatch.setenv("GROQ_API_KEY", "test-key")
+        providers_mod._groq_client.cache_clear()
+
+        client = GroqProvider()._client(GROQ_SPEC)
+
+        assert str(client.base_url).rstrip("/") == "https://api.groq.com/openai/v1"
+
+    def test_inherits_openai_request_and_error_translation(self):
+        assert issubclass(GroqProvider, OpenAIProvider)
+        assert GroqProvider.complete is OpenAIProvider.complete
+        assert GroqProvider._translate is OpenAIProvider._translate
+
+    def test_sends_configured_reasoning_effort(self, monkeypatch, groq_env):
+        fake = _FakeOpenAIClient()
+        monkeypatch.setattr(providers_mod, "_groq_client", lambda key: fake)
+        spec = ModelSpec(
+            provider="groq", model="test-model", reasoning_effort="low"
+        )
+
+        GroqProvider().complete(spec, [Message("user", "q")])
+
+        assert fake.payload["reasoning_effort"] == "low"
+
+    def test_omits_unset_reasoning_effort(self, monkeypatch, groq_env):
+        fake = _FakeOpenAIClient()
+        monkeypatch.setattr(providers_mod, "_groq_client", lambda key: fake)
+
+        GroqProvider().complete(GROQ_SPEC, [Message("user", "q")])
+
+        assert "reasoning_effort" not in fake.payload
 
 
 # --------------------------------------------------------------------------- Gemini
@@ -357,6 +422,10 @@ class TestRegistry:
     def test_both_providers_are_registered(self):
         assert get_provider("openai").name == "openai"
         assert get_provider("gemini").name == "gemini"
+
+    def test_groq_is_registered(self):
+        assert isinstance(get_provider("groq"), GroqProvider)
+        assert "groq" in available_providers()
 
     def test_unknown_provider_raises_and_lists_known(self):
         with pytest.raises(ProviderUnavailableError, match="Known providers"):

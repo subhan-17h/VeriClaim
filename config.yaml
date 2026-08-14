@@ -131,16 +131,23 @@ tasks:
   # --- evaluation (supplementary judge only) ---
   eval_judge: strong
 
-# Fallback ladder. Free Gemini rungs come first; the paid OpenAI rung is last and is
-# skipped entirely unless VC_ALLOW_PAID_FALLBACK=true. Every hop is recorded on the
-# trace, including a hop that was refused.
-# Free Gemini rungs first; the paid OpenAI rung is last and is skipped entirely unless
-# VC_ALLOW_PAID_FALLBACK=true. gpt-4o-mini is the only paid model used anywhere, chosen
-# because it is the cheapest capable option against a $1.00 prepaid credit.
+# Fallback ladder. Free Gemini rungs come first; free Groq rungs absorb overflow next;
+# the paid OpenAI rung is last and is skipped entirely unless
+# VC_ALLOW_PAID_FALLBACK=true. Every hop is recorded on the trace, including a hop that
+# was refused.
+# Free Gemini rungs first; free Groq rungs next; the paid OpenAI rung is last and is
+# skipped entirely unless VC_ALLOW_PAID_FALLBACK=true. gpt-4o-mini is the only paid
+# model used anywhere, chosen because it is the cheapest capable option against a
+# $1.00 prepaid credit. Every tier carries a structured-output task, so only Groq
+# models with json_schema support are eligible. reasoning_effort is set per model
+# because its allowed values differ.
 fallback:
   cheap:
     - {provider: gemini, model: gemini-3.5-flash, usd_per_1m_input: 0.0, usd_per_1m_output: 0.0,
        paid: false, rpm: 10, rpd: 250, max_output_tokens: 4096}
+    - {provider: groq, model: openai/gpt-oss-20b, reasoning_effort: low,
+       usd_per_1m_input: 0.0, usd_per_1m_output: 0.0, paid: false, rpm: 30, rpd: 1000,
+       max_output_tokens: 4096}
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
        paid: true, max_output_tokens: 2048}
   # Flash is a real free fallback for a flash-lite minute-limit burst. The strong tier
@@ -149,11 +156,17 @@ fallback:
   mid:
     - {provider: gemini, model: gemini-3.5-flash, usd_per_1m_input: 0.0, usd_per_1m_output: 0.0,
        paid: false, rpm: 10, rpd: 250, max_output_tokens: 4096}
+    - {provider: groq, model: qwen/qwen3.6-27b, reasoning_effort: none,
+       usd_per_1m_input: 0.0, usd_per_1m_output: 0.0, paid: false, rpm: 30, rpd: 1000,
+       max_output_tokens: 4096}
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
        paid: true, max_output_tokens: 4096}
   strong:
     - {provider: gemini, model: gemini-3.5-flash-lite, usd_per_1m_input: 0.0, usd_per_1m_output: 0.0,
        paid: false, rpm: 15, rpd: 1000, max_output_tokens: 4096}
+    - {provider: groq, model: openai/gpt-oss-120b, reasoning_effort: low,
+       usd_per_1m_input: 0.0, usd_per_1m_output: 0.0, paid: false, rpm: 30, rpd: 1000,
+       max_output_tokens: 4096}
     - {provider: openai, model: gpt-4o-mini, usd_per_1m_input: 0.15, usd_per_1m_output: 0.60,
        paid: true, max_output_tokens: 4096}
   vision:

@@ -137,6 +137,19 @@ class TestModelRouting:
         assert routing.last_rung_transient_retries == 6
         assert routing.transient_backoff_s == 0.5
 
+    def test_reasoning_effort_is_read_as_a_string(self, tmp_path):
+        configured = {
+            **MINIMAL,
+            "tiers": {
+                **MINIMAL["tiers"],
+                "cheap": {**MINIMAL["tiers"]["cheap"], "reasoning_effort": "none"},
+            },
+        }
+
+        routing = load_model_routing(_write_routing(tmp_path, configured))
+
+        assert routing.tiers["cheap"].reasoning_effort == "none"
+
     def test_task_pointing_at_missing_tier_is_rejected(self, tmp_path):
         broken = {**MINIMAL, "tasks": {"route": "nonexistent"}}
         with pytest.raises(ValueError, match="unknown tier"):
@@ -164,6 +177,59 @@ class TestShippedRoutingTable:
         routing = load_model_routing(DEFAULT_ROUTING_PATH)
         assert routing.tiers
         assert routing.tasks
+
+    def test_groq_rung_follows_all_gemini_rungs_and_precedes_paid_fallback(self):
+        routing = load_model_routing(DEFAULT_ROUTING_PATH)
+        for tier in ("cheap", "mid", "strong"):
+            chain = routing.fallbacks[tier]
+            groq_indexes = [
+                index for index, spec in enumerate(chain) if spec.provider == "groq"
+            ]
+            gemini_indexes = [
+                index for index, spec in enumerate(chain) if spec.provider == "gemini"
+            ]
+            paid_indexes = [index for index, spec in enumerate(chain) if spec.paid]
+
+            assert len(groq_indexes) == 1, f"{tier} must have exactly one Groq rung"
+            assert gemini_indexes, f"{tier} must keep Gemini ahead of Groq"
+            assert paid_indexes, f"{tier} must keep a paid fallback after Groq"
+            assert max(gemini_indexes) < groq_indexes[0] < min(paid_indexes)
+
+    def test_groq_rungs_are_free_and_set_reasoning_effort(self):
+        routing = load_model_routing(DEFAULT_ROUTING_PATH)
+        groq_rungs = [
+            spec
+            for chain in routing.fallbacks.values()
+            for spec in chain
+            if spec.provider == "groq"
+        ]
+
+        assert groq_rungs
+        for spec in groq_rungs:
+            assert not spec.paid, f"{spec.label} must remain a free rung"
+            assert spec.reasoning_effort is not None, (
+                f"{spec.label} must declare model-specific reasoning effort"
+            )
+
+    def test_vision_ladder_has_no_groq_rung(self):
+        routing = load_model_routing(DEFAULT_ROUTING_PATH)
+        assert all(spec.provider != "groq" for spec in routing.fallbacks["vision"])
+
+    def test_groq_rungs_only_use_schema_capable_models(self):
+        routing = load_model_routing(DEFAULT_ROUTING_PATH)
+        schema_capable_models = {
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "qwen/qwen3.6-27b",
+        }
+        configured_models = {
+            spec.model
+            for chain in routing.fallbacks.values()
+            for spec in chain
+            if spec.provider == "groq"
+        }
+
+        assert configured_models <= schema_capable_models
 
     def test_every_task_the_system_calls_is_routed(self):
         routing = load_model_routing(DEFAULT_ROUTING_PATH)

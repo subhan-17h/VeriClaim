@@ -32,6 +32,7 @@ from vericlaim.gateway.types import (
 
 # HTTP statuses that are worth retrying against the same model.
 _RETRYABLE_STATUS = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 
 class Provider(Protocol):
@@ -98,6 +99,13 @@ def _openai_client(api_key: str):
     return OpenAI(api_key=api_key, max_retries=0)
 
 
+@lru_cache(maxsize=4)
+def _groq_client(api_key: str):
+    from openai import OpenAI
+
+    return OpenAI(api_key=api_key, base_url=_GROQ_BASE_URL, max_retries=0)
+
+
 class OpenAIProvider:
     """OpenAI chat completions, with strict JSON-schema structured output."""
 
@@ -110,6 +118,10 @@ class OpenAIProvider:
                 "OPENAI_API_KEY is not set", provider=self.name, model=spec.model
             )
         return _openai_client(api_key)
+
+    def _extra_payload(self, spec: ModelSpec) -> dict[str, Any]:
+        """Provider-specific request parameters. Empty for OpenAI itself."""
+        return {}
 
     def _content(self, message: Message) -> Any:
         if not message.images:
@@ -143,6 +155,7 @@ class OpenAIProvider:
             "max_completion_tokens": spec.max_output_tokens,
             "timeout": spec.timeout_s,
         }
+        payload.update(self._extra_payload(spec))
         if json_schema is not None:
             payload["response_format"] = {
                 "type": "json_schema",
@@ -189,6 +202,28 @@ class OpenAIProvider:
             )
             return cls(str(exc), provider=self.name, model=spec.model)
         return PermanentProviderError(str(exc), provider=self.name, model=spec.model)
+
+
+# Groq speaks the OpenAI protocol, so inheritance keeps request handling identical.
+class GroqProvider(OpenAIProvider):
+    """Groq through its OpenAI-compatible endpoint."""
+
+    name = "groq"
+
+    def _extra_payload(self, spec: ModelSpec) -> dict[str, Any]:
+        return (
+            {"reasoning_effort": spec.reasoning_effort}
+            if spec.reasoning_effort
+            else {}
+        )
+
+    def _client(self, spec: ModelSpec):
+        api_key = os.environ.get("GROQ_API_KEY", "")
+        if not api_key:
+            raise ProviderUnavailableError(
+                "GROQ_API_KEY is not set", provider=self.name, model=spec.model
+            )
+        return _groq_client(api_key)
 
 
 # --------------------------------------------------------------------------- Gemini
@@ -304,6 +339,7 @@ class GeminiProvider:
 
 _REGISTRY: dict[str, Provider] = {
     OpenAIProvider.name: OpenAIProvider(),
+    GroqProvider.name: GroqProvider(),
     GeminiProvider.name: GeminiProvider(),
 }
 
@@ -332,6 +368,7 @@ def available_providers() -> tuple[str, ...]:
 
 __all__ = [
     "GeminiProvider",
+    "GroqProvider",
     "ImagePart",
     "OpenAIProvider",
     "Provider",
