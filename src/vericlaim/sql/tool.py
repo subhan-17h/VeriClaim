@@ -125,7 +125,7 @@ class ClaimsQuerier:
     ) -> PipelineOutcome:
         """Plan and run the question, raising rather than returning a partial answer."""
         selected = self._selected(tables)
-        resolved = self._grounded(understanding)
+        resolved = self._grounded(question, understanding)
 
         try:
             plan = plan_query(
@@ -192,17 +192,21 @@ class ClaimsQuerier:
         return selected
 
     def _grounded(
-        self, understanding: Mapping[str, Any] | None
+        self, question: str, understanding: Mapping[str, Any] | None
     ) -> EntityResolution | None:
-        """Resolve the entities the question named, before anything is planned.
+        """Resolve every run-level mention, but scope refusal to this sub-goal.
 
-        An ambiguous mention stops the run here. Choosing between two customers whose
-        names both fit is the user's decision, and guessing produces a confident answer
-        about the wrong one -- which is worse than no answer, because it is actionable.
+        Only an ambiguous mention named by ``question`` stops this source. An out-of-scope
+        ambiguity cannot become a filter through grounding because ``stored_values``
+        excludes every non-resolved mention from the planner and generator. If such a
+        filter is written anyway, the pipeline's ``unresolvable_filters`` check catches
+        the empty result and reports that the database holds no such value. An in-scope
+        ambiguity still keeps the refusal contract: choosing between matching entities
+        remains the user's decision.
         """
         if not understanding:
             return None
-        resolved = resolve_entities(understanding, self.catalog)
+        resolved = resolve_entities(understanding, self.catalog, scope=question)
         if resolved.needs_clarification:
             raise UnanswerableQuestionError(resolved.clarification_question)
         return resolved

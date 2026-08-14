@@ -260,6 +260,11 @@ visible.
       - [x] Run the offline suite and Ruff, then record the evidence below.
 - [ ] **C-8.13** The four-clause flagship question, run live with no `contexts/` edits; and
       delete the two `pyproject.toml` entry points that name modules which do not exist. — `N`
+      - [x] Delete the two entry points naming modules that do not exist.
+      - [ ] Run the four-clause question live and resolve citations from all four sources.
+            Blocked on C-8.14: the first live run answered two sources of four.
+- [x] **C-8.14** Scope the entity resolver's ambiguity refusal to the sub-goal the source was
+      actually asked, so a mention belonging to another clause cannot abort a source. — `N`
 
 **Acceptance:** ten runs recorded and their differences named; a source tool receives the
 run's understanding; the flagship question resolves citations from all four sources.
@@ -942,3 +947,43 @@ that a non-final rung still gets the ordinary budget, that a daily exhaustion is
 into the larger one, and that a recovery is recorded once. A guard that passed before the change
 is doing its job; it is only worth saying so that nobody later mistakes four green tests for four
 proofs of the fix.
+
+### C-8.14 - scope the resolver's refusal to the sub-goal
+
+**Found by running C-8.13, not by reading code.** The four-clause flagship question returned an
+answer from two sources of four. Both SQL-shaped sources died on the same refusal:
+*"Did you mean ... for ..."* -- an ambiguity in a product name that only the **policy** clause
+had named. The three clauses that never mentioned it died with it.
+
+**Root cause.** `ClaimsQuerier._grounded` resolved mentions from the **whole run's**
+`understanding`, while the source had only been asked a **sub-goal**. Every mention in the
+question therefore gated every source, so an ambiguity belonging to one clause aborted sources
+that had nothing to do with it. `SpreadsheetQuerier` inherits `run`, which is why both failed
+identically.
+
+**C-8.10 is the trigger, and the defect is C-8.10's.** Before it, `understanding` was never
+supplied, `_grounded` returned `None`, and the resolver never ran in production. C-8.10's card
+predicted this risk for the spreadsheet source; it landed on the claims source too, which the
+card did not anticipate. The entity resolver was correct and dead; wiring it in made it live and
+over-broad in the same commit.
+
+**What changed -- the refusal narrowed, the resolution did not.** `resolve_entities` gained a
+keyword-only `scope`. Every mention is still resolved exactly as before, so `stored_values`
+loses no spelling help; only the ambiguity gate is scoped, to mentions the sub-goal actually
+names. `scope=None` reproduces the previous behaviour, so no other caller changes.
+
+**Why this is safe, and not a weakening of C-5.5.** An out-of-scope ambiguous mention cannot
+reach the planner or the generator, because `stored_values` already excludes every non-resolved
+mention from what a prompt is shown. If a filter on an ungrounded value is written regardless,
+`unresolvable_filters` still catches the empty result and reports that the database holds no
+such value -- the "empty result set that looks like a fact" the resolver exists to prevent has a
+second line of defence downstream. When the ambiguous mention *is* the sub-goal's own, the
+refusal is unchanged: choosing between two entities that both fit stays the user's decision.
+
+**Evidence.** Five tests, and the honest breakdown of which prove what. Reverting the two source
+files and re-running showed **three failing**: the out-of-scope stored-values case, the
+adapter's threading of the sub-goal as scope, and -- the behavioural proof -- an out-of-scope
+ambiguity raising `UnanswerableQuestionError` on the old source, reproducing the live failure's
+exact shape offline at zero quota. **Two pass in both directions by design**: that `scope=None`
+still gates every mention, and that an in-scope ambiguity still refuses with the same question.
+Those two guard the halves that must NOT change. **1456 passed, 77 deselected**; ruff clean.

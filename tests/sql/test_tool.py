@@ -65,6 +65,7 @@ class FakeGateway:
     plan: dict[str, Any]
     sql: str = "SELECT COUNT(*) FROM ops.claims"
     tasks: list[str] = field(default_factory=list)
+    messages: list[Any] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def complete_json(
@@ -72,6 +73,7 @@ class FakeGateway:
     ) -> Any:
         with self.lock:
             self.tasks.append(task)
+            self.messages.append(messages)
         if task == "sql_planner":
             return _Completion(self.plan)
         return _Completion({"sql": self.sql})
@@ -343,6 +345,76 @@ def test_an_ambiguous_entity_stops_the_run_and_asks() -> None:
     with pytest.raises(UnanswerableQuestionError, match="Did you mean"):
         subject.query("How many for Ahmed?", understanding={"entities": ["Ahmed"]})
 
+    assert gateway.tasks == []
+
+
+def test_an_out_of_scope_ambiguity_does_not_stop_the_subgoal() -> None:
+    catalog = StaticCatalog(
+        {
+            CLAIMS.qualified: {
+                CLAIMS.columns[1].name: (
+                    CatalogValue("hail_damage"),
+                    CatalogValue("Orchid Foods Ltd"),
+                    CatalogValue("Orchid Freight Ltd"),
+                )
+            }
+        }
+    )
+    gateway = FakeGateway(PLAN)
+    subject = ClaimsQuerier(
+        contexts=CONTEXTS,
+        catalog=catalog,
+        execute=FakeDatabase([rows((42,))]),
+        settings=settings(),
+        gateway=gateway,
+    )
+
+    subject.query(
+        "How many hail damage losses?",
+        understanding={"entities": ["hail damage", "Orchid"]},
+    )
+
+    planner_payload = json.loads(gateway.messages[0][1]["content"])
+    assert planner_payload["resolved_entities"] == [
+        {
+            "mention": "hail damage",
+            "table": CLAIMS.qualified,
+            "column": CLAIMS.columns[1].name,
+            "values": ["hail_damage"],
+            "match_kind": "equals",
+        }
+    ]
+
+
+def test_an_in_scope_ambiguity_keeps_the_same_refusal() -> None:
+    catalog = StaticCatalog(
+        {
+            CLAIMS.qualified: {
+                CLAIMS.columns[1].name: (
+                    CatalogValue("Orchid Foods Ltd"),
+                    CatalogValue("Orchid Freight Ltd"),
+                )
+            }
+        }
+    )
+    gateway = FakeGateway(PLAN)
+    subject = ClaimsQuerier(
+        contexts=CONTEXTS,
+        catalog=catalog,
+        execute=FakeDatabase([rows((42,))]),
+        settings=settings(),
+        gateway=gateway,
+    )
+
+    with pytest.raises(UnanswerableQuestionError) as caught:
+        subject.query(
+            "How many losses for ORCHID?",
+            understanding={"entities": ["Orchid"]},
+        )
+
+    assert caught.value.reason == (
+        'Did you mean "Orchid Foods Ltd" or "Orchid Freight Ltd" for "Orchid"?'
+    )
     assert gateway.tasks == []
 
 

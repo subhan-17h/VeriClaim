@@ -183,21 +183,26 @@ class TestClaimScoping:
 def test_the_sql_adapter_carries_understanding_to_entity_resolution(
     tools: SourceTools, monkeypatch
 ) -> None:
+    goal = "Count the matching records."
     understanding = {"entities": ["water damage"]}
     seen: dict[str, object] = {}
 
-    def record(candidate: object, catalog: object) -> None:
-        seen.update(candidate=candidate, catalog=catalog)
+    def record(candidate: object, catalog: object, *, scope: str | None = None) -> None:
+        seen.update(candidate=candidate, catalog=catalog, scope=scope)
         raise RuntimeError("entity resolution reached")
 
     monkeypatch.setattr("vericlaim.sql.tool.resolve_entities", record)
 
     with pytest.raises(RuntimeError, match="entity resolution reached"):
         tools.query_claims(
-            SourceRequest(goal="Count the matching records.", understanding=understanding)
+            SourceRequest(goal=goal, understanding=understanding)
         )
 
-    assert seen == {"candidate": understanding, "catalog": tools.claims.catalog}
+    assert seen == {
+        "candidate": understanding,
+        "catalog": tools.claims.catalog,
+        "scope": goal,
+    }
 
 
 def test_the_module_holds_no_mutable_state() -> None:

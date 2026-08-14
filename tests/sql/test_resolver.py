@@ -242,6 +242,64 @@ def test_an_ambiguous_mention_asks_which_one_was_meant() -> None:
     assert "Ahmed" in result.clarification_question
 
 
+def test_no_scope_keeps_every_ambiguity_in_the_refusal_gate() -> None:
+    understanding = {"entities": ["Orchid"]}
+    catalog = FakeCatalog(
+        values={
+            "synthetic.records": {
+                "account": (
+                    CatalogValue("Orchid Foods Ltd"),
+                    CatalogValue("Orchid Freight Ltd"),
+                )
+            }
+        }
+    )
+
+    result = resolve_entities(understanding, catalog)
+
+    assert result.needs_clarification is True
+    assert result.clarification_question == (
+        'Did you mean "Orchid Foods Ltd" or "Orchid Freight Ltd" for "Orchid"?'
+    )
+
+
+def test_out_of_scope_ambiguity_stays_out_of_stored_values() -> None:
+    understanding = {"entities": ["hail damage", "Orchid"]}
+    table = "synthetic.records"
+    column = "category"
+    catalog = FakeCatalog(
+        values={
+            table: {
+                column: (
+                    CatalogValue("hail_damage"),
+                    CatalogValue("Orchid Foods Ltd"),
+                    CatalogValue("Orchid Freight Ltd"),
+                )
+            }
+        }
+    )
+
+    result = resolve_entities(
+        understanding,
+        catalog,
+        scope="How many hail damage losses?",
+    )
+
+    assert [(mention.mention, mention.status) for mention in result.mentions] == [
+        ("hail damage", "resolved"),
+        ("Orchid", "ambiguous"),
+    ]
+    assert stored_values(result) == [
+        {
+            "mention": "hail damage",
+            "table": table,
+            "column": column,
+            "values": ["hail_damage"],
+            "match_kind": "equals",
+        }
+    ]
+
+
 # ------------------------------------------------------------------ rewriting
 
 

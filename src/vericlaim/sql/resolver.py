@@ -242,7 +242,10 @@ def _reference_matches(matches: Sequence[ReferenceMatch]) -> tuple[Match, ...]:
 
 
 def resolve_entities(
-    understanding: Mapping[str, Any], catalog: Catalog
+    understanding: Mapping[str, Any],
+    catalog: Catalog,
+    *,
+    scope: str | None = None,
 ) -> EntityResolution:
     """Resolve every entity and quoted filter value the question named."""
     mentions = _extract_mentions(understanding)
@@ -250,7 +253,11 @@ def resolve_entities(
         return EntityResolution()
 
     resolved = tuple(resolve_mention(mention, catalog) for mention in mentions)
-    ambiguous = [result for result in resolved if result.status == "ambiguous"]
+    ambiguous = [
+        result
+        for result in resolved
+        if result.status == "ambiguous" and _mention_in_scope(result.mention, scope)
+    ]
     return EntityResolution(
         mentions=resolved,
         needs_clarification=bool(ambiguous),
@@ -258,6 +265,12 @@ def resolve_entities(
             _clarification_question(ambiguous[0]) if ambiguous else ""
         ),
     )
+
+
+def _mention_in_scope(mention: str, scope: str | None) -> bool:
+    if scope is None:
+        return True
+    return normalize(mention) in normalize(scope)
 
 
 def _extract_mentions(understanding: Mapping[str, Any]) -> tuple[str, ...]:
