@@ -22,7 +22,7 @@ from openpyxl.utils import get_column_letter
 from starlette.responses import FileResponse
 
 from vericlaim.config import Settings
-from vericlaim.sql.contexts import SchemaContext, load_contexts
+from vericlaim.sql.contexts import SchemaContext, context_detail, load_contexts
 
 #: The largest sheet this will render. An order of magnitude above the largest sheet in
 #: this corpus, so it bounds a pathological workbook without silently truncating a real
@@ -146,5 +146,19 @@ def build_router(catalog: SourceCatalog) -> APIRouter:
                 detail=f"No reviewed sheet '{sheet}' in workbook '{workbook}'",
             )
         return read_sheet(path, sheet)
+
+    @router.get("/sql/{table}")
+    def sql_table(table: str) -> dict[str, object]:
+        """What a SQL claim traces back to: the reviewed description of its table.
+
+        No query runs. The rows a fresh query returned need not be the rows the
+        answer used, and it would sit outside the validated plan path.
+        """
+        context = catalog.tables.get(table)
+        if context is None:
+            raise HTTPException(
+                status_code=404, detail=f"No reviewed context for table '{table}'"
+            )
+        return context_detail(context)
 
     return router
