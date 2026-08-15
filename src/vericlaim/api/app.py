@@ -23,7 +23,8 @@ from pydantic import BaseModel, field_validator
 from starlette.responses import StreamingResponse
 
 from vericlaim.api.protocol import Error, Event, Final
-from vericlaim.config import PROJECT_ROOT
+from vericlaim.api.sources import SourceCatalog, build_router
+from vericlaim.config import PROJECT_ROOT, get_settings
 from vericlaim.orchestrator.tools import open_tools
 
 #: A run must be closeable, not merely iterable: closing it is how cancellation
@@ -204,6 +205,7 @@ def _stream(
 def create_app(
     run: Runner | None = None,
     dist: Path | None = None,
+    catalog: SourceCatalog | None = None,
 ) -> FastAPI:
     """Build the application. ``run`` is injectable so the transport is testable alone.
 
@@ -245,6 +247,13 @@ def create_app(
                 status_code=500, detail="The run produced no answer to return"
             )
         return final.payload
+
+    # The source routes are registered with the rest of /api, and before the SPA mount
+    # for the same reason: a catch-all at "/" would otherwise swallow them.
+    sources = (
+        catalog if catalog is not None else SourceCatalog.from_settings(get_settings())
+    )
+    application.include_router(build_router(sources))
 
     # Mounted last, and only when built. StaticFiles raises on a missing directory, so
     # an unconditional mount would stop the API importing in any checkout that has not
