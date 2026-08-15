@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import queue
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -25,6 +25,10 @@ from starlette.responses import StreamingResponse
 from vericlaim.api.protocol import Error, Event, Final
 from vericlaim.config import PROJECT_ROOT
 from vericlaim.orchestrator.tools import open_tools
+
+#: A run must be closeable, not merely iterable: closing it is how cancellation
+#: reaches the graph and releases the tools a run holds.
+type Runner = Callable[..., Generator[Event, None, None]]
 
 PING: dict[str, Any] = {"event": "ping"}
 PING_INTERVAL_S = 10.0
@@ -41,6 +45,9 @@ class AskRequest(BaseModel):
     """One question. Rejected here if blank, before anything is built for it."""
 
     question: str
+    #: Minted by the client so it can cancel this run before the first event names a
+    #: trace. Optional: a client that cannot cancel must still be served.
+    run_id: str | None = None
 
     @field_validator("question")
     @classmethod
@@ -48,6 +55,47 @@ class AskRequest(BaseModel):
         if not value.strip():
             raise ValueError("A run needs a question to answer")
         return value.strip()
+
+
+class RunRegistry:
+    """The runs a client can still stop, and how to stop them.
+
+    A disconnect cannot carry this. Starlette drives a sync stream through
+    ``iterate_in_threadpool``, which never closes the iterator it wraps, so a hung-up
+    connection releases a run only when the cyclic collector reaches it -- measured at
+    over 15 seconds at a realistic event pace. A stop that leaves paid model calls
+    running for an answer nobody will read is not a stop, so the client says so
+    explicitly and this is where that reaches the run.
+    """
+
+    def __init__(self) -> None:
+        self._stops: dict[str, threading.Event] = {}
+        self._lock = threading.Lock()
+
+    def open(self, run_id: str | None) -> threading.Event:
+        """Hand back this run's stop flag, registering it when it can be named."""
+        stop = threading.Event()
+        if run_id is None:
+            return stop
+        with self._lock:
+            self._stops[run_id] = stop
+        return stop
+
+    def cancel(self, run_id: str) -> bool:
+        """Trip a live run's stop flag. False when no such run is running."""
+        with self._lock:
+            stop = self._stops.get(run_id)
+        if stop is None:
+            return False
+        stop.set()
+        return True
+
+    def close(self, run_id: str | None) -> None:
+        """Forget a finished run, so the registry does not grow for the process's life."""
+        if run_id is None:
+            return
+        with self._lock:
+            self._stops.pop(run_id, None)
 
 
 def _ndjson(payload: dict[str, Any]) -> str:
@@ -85,41 +133,76 @@ def _default_run(question: str) -> Iterator[Event]:
         )
 
 
-def _events(run: Callable[..., Iterator[Event]], question: str) -> Iterator[str]:
+def _events(
+    run: Runner,
+    question: str,
+    stop: threading.Event | None = None,
+    on_end: Callable[[], None] | None = None,
+) -> Iterator[str]:
     """Serialize a run's events, emitting a keepalive whenever it goes quiet.
 
     The run is driven on a worker thread because a run can go quiet for long enough that
     silence is indistinguishable from a finished stream. A dropped connection and a
     crashed run look identical to a client, so a failure is reported as an error event
     and a clean end rather than as a truncated response.
+
+    ``stop`` is what a cancelling client trips. The worker reads it between events, so
+    the node in flight finishes and nothing after it starts. Closing this generator
+    trips the same flag, which is the backstop for a client that vanished without
+    cancelling -- unreliable in timing, which is why it is not the mechanism.
+
+    ``on_end`` fires when the run stops, on the worker's thread. It hangs off the run
+    rather than off this generator because a client can hang up without this generator
+    ever being finalized, and a run that has ended must stop being cancellable then.
     """
     channel: queue.Queue[Any] = queue.Queue()
+    stop = threading.Event() if stop is None else stop
 
     def drive() -> None:
+        events = run(question)
         try:
-            for event in run(question):
+            for event in events:
+                if stop.is_set():
+                    break
                 channel.put(event)
         except Exception as exc:  # noqa: BLE001 - reported to the client verbatim
             channel.put(Error(message=str(exc)))
         finally:
+            # Closing a generator suspended at its yield raises GeneratorExit inside
+            # it, which unwinds the run's `with open_tools(...)` and releases the
+            # database pool. This is why a run must be a generator, not any iterator.
+            events.close()
             channel.put(_DONE)
+            if on_end is not None:
+                on_end()
 
     worker = threading.Thread(target=drive, daemon=True)
     worker.start()
 
-    while True:
-        try:
-            item = channel.get(timeout=PING_INTERVAL_S)
-        except queue.Empty:
-            yield _ndjson(PING)
-            continue
-        if item is _DONE:
-            return
-        yield _ndjson(item.to_json())
+    try:
+        while True:
+            try:
+                item = channel.get(timeout=PING_INTERVAL_S)
+            except queue.Empty:
+                yield _ndjson(PING)
+                continue
+            if item is _DONE:
+                return
+            yield _ndjson(item.to_json())
+    finally:
+        stop.set()
+
+
+def _stream(
+    run: Runner, question: str, run_id: str | None, registry: RunRegistry
+) -> Iterator[str]:
+    """Serialize one run, cancellable by name for exactly as long as it is running."""
+    stop = registry.open(run_id)
+    yield from _events(run, question, stop, lambda: registry.close(run_id))
 
 
 def create_app(
-    run: Callable[..., Iterator[Event]] | None = None,
+    run: Runner | None = None,
     dist: Path | None = None,
 ) -> FastAPI:
     """Build the application. ``run`` is injectable so the transport is testable alone.
@@ -129,12 +212,24 @@ def create_app(
     """
     execute = run if run is not None else _default_run
     application = FastAPI(title="VeriClaim")
+    # Per application rather than per module: two apps in one process (the test suite
+    # builds many) must not be able to cancel each other's runs.
+    registry = RunRegistry()
 
     @application.post("/api/ask/stream")
     def ask_stream(request: Annotated[AskRequest, Body()]) -> StreamingResponse:
         return StreamingResponse(
-            _events(execute, request.question), media_type="application/x-ndjson"
+            _stream(execute, request.question, request.run_id, registry),
+            media_type="application/x-ndjson",
         )
+
+    @application.post("/api/runs/{run_id}/cancel")
+    def cancel(run_id: str) -> dict[str, bool]:
+        if not registry.cancel(run_id):
+            raise HTTPException(
+                status_code=404, detail=f"No run '{run_id}' is running to cancel"
+            )
+        return {"cancelled": True}
 
     @application.post("/api/ask")
     def ask(request: Annotated[AskRequest, Body()]) -> dict[str, Any]:
@@ -164,4 +259,4 @@ def create_app(
 
 app = create_app()
 
-__all__ = ["AskRequest", "PING", "app", "create_app"]
+__all__ = ["AskRequest", "PING", "RunRegistry", "app", "create_app"]

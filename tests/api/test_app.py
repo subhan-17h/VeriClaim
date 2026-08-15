@@ -208,6 +208,138 @@ def test_the_first_streamed_event_carries_the_same_trace_as_the_final() -> None:
     assert events[0]["trace_id"] == events[-1]["trace_id"] == "trace-abc"
 
 
+class TestCancellation:
+    """A client that goes away must stop the run, not leave it billing quietly.
+
+    The run keeps making paid model calls until it finishes, so a stop that only
+    stops the browser reading would cost exactly as much as no stop at all.
+    """
+
+    @staticmethod
+    def _endless(started: threading.Event, closed: threading.Event):
+        """A run that yields forever, one event per short pause, until it is closed."""
+
+        def run(question: str, *args: Any, **kwargs: Any) -> Any:
+            try:
+                while True:
+                    yield RunStarted(trace_id="t1", question=question)
+                    started.set()
+                    # Stands in for a node doing work: the flag is read between
+                    # events, so a run only stops where it can stop cleanly.
+                    threading.Event().wait(0.01)
+            finally:
+                closed.set()
+
+        return run
+
+    def test_cancelling_a_live_run_stops_it(self) -> None:
+        """The stop a client presses. A disconnect is a backstop, not the mechanism.
+
+        Starlette drives a sync stream through ``iterate_in_threadpool``, which never
+        closes the iterator it wraps, so a hung-up connection frees the run only when
+        the cyclic collector reaches it -- measured at over 15s at a realistic event
+        pace. A run that answers with paid model calls cannot be stopped on that.
+        """
+        import vericlaim.api.app as module
+
+        started, closed = threading.Event(), threading.Event()
+        registry = module.RunRegistry()
+        stream = module._stream(
+            self._endless(started, closed), "q", "run-1", registry
+        )
+
+        next(stream)
+        assert started.wait(1.0)
+        assert registry.cancel("run-1") is True
+
+        assert closed.wait(2.0), "cancelling did not stop the run"
+
+    def test_cancelling_a_run_nobody_started_is_not_found(self) -> None:
+        client = _client(StubRun([_final()]))
+
+        response = client.post("/api/runs/never-started/cancel")
+
+        assert response.status_code == 404
+
+    def test_a_finished_run_can_no_longer_be_cancelled(self) -> None:
+        """A registry that grew with every question would leak for the process's life."""
+        client = _client(StubRun([RunStarted(trace_id="t1", question="q"), _final()]))
+
+        streamed = client.post(
+            "/api/ask/stream", json={"question": "q", "run_id": "run-2"}
+        )
+        cancelled = client.post("/api/runs/run-2/cancel")
+
+        assert streamed.status_code == 200
+        assert cancelled.status_code == 404
+
+    def test_a_run_that_ends_deregisters_itself_without_the_client(self) -> None:
+        """The registration lasts as long as the run, not as long as the connection.
+
+        A client that hangs up mid-stream may never finalize the stream generator, so
+        hanging deregistration off it would leave finished runs looking cancellable.
+        """
+        import vericlaim.api.app as module
+
+        registry = module.RunRegistry()
+        stream = module._stream(
+            StubRun([RunStarted(trace_id="t1", question="q"), _final()]),
+            "q",
+            "run-3",
+            registry,
+        )
+
+        next(stream)  # one frame read, then the client stops reading
+
+        for _ in range(100):
+            if not registry.cancel("run-3"):
+                break
+            threading.Event().wait(0.02)
+        else:
+            raise AssertionError("a finished run stayed cancellable")
+
+    def test_a_question_without_a_run_id_still_streams(self) -> None:
+        """Cancellation is opt-in: a client that cannot cancel must still be served."""
+        response = _client(
+            StubRun([RunStarted(trace_id="t1", question="q"), _final()])
+        ).post("/api/ask/stream", json={"question": "q"})
+
+        assert [event["event"] for event in _lines(response)] == ["run_started", "final"]
+
+    def test_abandoning_the_stream_closes_the_run(self) -> None:
+        import vericlaim.api.app as module
+
+        started, closed = threading.Event(), threading.Event()
+        stream = module._events(self._endless(started, closed), "q")
+
+        next(stream)
+        assert started.wait(1.0)
+        stream.close()
+
+        assert closed.wait(2.0), "the run kept going after its client went away"
+
+    def test_a_stopped_run_produces_nothing_further(self) -> None:
+        import vericlaim.api.app as module
+
+        started, closed = threading.Event(), threading.Event()
+        run = self._endless(started, closed)
+        seen: list[int] = []
+
+        def counted(question: str, *args: Any, **kwargs: Any) -> Any:
+            for event in run(question):
+                seen.append(1)
+                yield event
+
+        stream = module._events(counted, "q")
+        next(stream)
+        stream.close()
+        assert closed.wait(2.0)
+        settled = len(seen)
+        threading.Event().wait(0.1)
+
+        assert len(seen) == settled
+
+
 class TestTheSpaMount:
     """The API must run from a checkout that has never been built.
 
