@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from openpyxl import load_workbook
+from openpyxl.utils import get_column_letter
 from starlette.responses import FileResponse
 
 from vericlaim.config import Settings
@@ -33,6 +35,48 @@ def _pdfs(directory: Path) -> dict[str, Path]:
     if not directory.is_dir():
         return {}
     return {path.name: path for path in sorted(directory.glob("*.pdf"))}
+
+
+def _cell(value: object) -> str:
+    """Render a cell as the sheet holds it.
+
+    Stringified here rather than in the client so nothing downstream reformats a
+    number into something the sheet does not say. An empty cell is an empty string,
+    not a null: the grid is a rectangle.
+    """
+    if value is None:
+        return ""
+    return str(value)
+
+
+def read_sheet(
+    path: Path, sheet: str, *, limit: int = MAX_SHEET_ROWS
+) -> dict[str, object]:
+    """Read one sheet as written: banner, blank rows, header and all."""
+    book = load_workbook(path, read_only=True, data_only=True)
+    try:
+        if sheet not in book.sheetnames:
+            raise KeyError(sheet)
+        worksheet = book[sheet]
+        width = worksheet.max_column or 0
+        rows: list[list[str]] = []
+        total = 0
+        for values in worksheet.iter_rows(values_only=True):
+            total += 1
+            if len(rows) < limit:
+                padded = list(values) + [None] * (width - len(values))
+                rows.append([_cell(value) for value in padded[:width]])
+        return {
+            "workbook": path.name,
+            "sheet": sheet,
+            "columns": [get_column_letter(index + 1) for index in range(width)],
+            "first_row": 1,
+            "rows": rows,
+            "total_rows": total,
+            "truncated": total > len(rows),
+        }
+    finally:
+        book.close()
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,5 +136,15 @@ def build_router(catalog: SourceCatalog) -> APIRouter:
     @router.get("/scanned/{document}")
     def scanned_document(document: str) -> FileResponse:
         return _document(catalog.scanned, document, "scanned")
+
+    @router.get("/spreadsheet/{workbook}/{sheet}")
+    def spreadsheet(workbook: str, sheet: str) -> dict[str, object]:
+        path = catalog.sheets.get((workbook, sheet))
+        if path is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No reviewed sheet '{sheet}' in workbook '{workbook}'",
+            )
+        return read_sheet(path, sheet)
 
     return router
