@@ -676,6 +676,14 @@ table.data td.key { color: var(--text); font-weight: 500; font-family: 'Geist Mo
 .send-btn.ready:hover { background: var(--cyan-deep); border-color: var(--cyan-deep); transform: translateY(-1px); }
 .send-btn.ready:active { transform: translateY(0); }
 .send-btn:disabled { cursor: default; }
+/* Stop is available, not inviting: the filled shape without the accent, so the eye
+   does not read it as the thing to press next. */
+.send-btn.stop {
+  background: var(--soft); border-color: var(--border); color: var(--text);
+}
+.send-btn.stop:hover { background: var(--elevated); border-color: var(--steel); transform: translateY(-1px); }
+.send-btn.stop:active { transform: translateY(0); }
+.send-btn.stop svg { width: 13px; height: 13px; }
 
 .composer-hint {
   display: flex; align-items: center; gap: 8px;
@@ -766,6 +774,7 @@ table.data td.key { color: var(--text); font-weight: 500; font-family: 'Geist Mo
 .stage-collapse { margin: 6px 0 0; }
 .stage-summary:hover, .stage-collapse:hover { color: var(--text); border-color: var(--border); }
 .stage-summary svg { width: 14px; height: 14px; color: var(--success); }
+.stage-summary.stopped svg { width: 11px; height: 11px; color: var(--steel); }
 
 /* ============================================================
    Verdict: an unverified answer must never look verified

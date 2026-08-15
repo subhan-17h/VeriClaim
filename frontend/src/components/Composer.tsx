@@ -4,10 +4,11 @@ import { Ico } from "./icons";
 
 type ComposerProps = {
   onSend: (text: string) => void;
+  onStop: () => void;
   busy: boolean;
 };
 
-export function Composer({ onSend, busy }: ComposerProps) {
+export function Composer({ onSend, onStop, busy }: ComposerProps) {
   const [value, setValue] = useState("");
   const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -54,19 +55,39 @@ export function Composer({ onSend, busy }: ComposerProps) {
             onBlur={() => setFocused(false)}
             rows={1}
           />
-          <button
-            className={"send-btn" + (ready ? " ready" : "")}
-            onClick={submit}
-            disabled={!ready}
-            title="Send"
-            type="button"
-          >
-            <Ico.Send />
-          </button>
+          {/* While a run is going the same control stops it, so the one button
+              under the cursor is always the one that acts on what is happening. */}
+          {busy ? (
+            <button
+              className="send-btn stop"
+              onClick={onStop}
+              title="Stop this run"
+              aria-label="Stop this run"
+              type="button"
+            >
+              <Ico.Stop />
+            </button>
+          ) : (
+            <button
+              className={"send-btn" + (ready ? " ready" : "")}
+              onClick={submit}
+              disabled={!ready}
+              title="Send"
+              type="button"
+            >
+              <Ico.Send />
+            </button>
+          )}
         </div>
         <div className="composer-hint">
-          <kbd>Enter</kbd> to send <span className="sep" /> <kbd>Shift</kbd>+
-          <kbd>Enter</kbd> new line
+          {busy ? (
+            <>Stop ends the run on the server, not just this page</>
+          ) : (
+            <>
+              <kbd>Enter</kbd> to send <span className="sep" /> <kbd>Shift</kbd>+
+              <kbd>Enter</kbd> new line
+            </>
+          )}
         </div>
       </div>
     </div>

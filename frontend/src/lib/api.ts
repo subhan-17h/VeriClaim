@@ -26,24 +26,56 @@ async function errorDetail(response: Response): Promise<string> {
 
 function post(
   path: string,
-  question: string,
+  body: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<Response> {
   return fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify(body),
     signal
   });
 }
+
+function aborted(): DOMException {
+  return new DOMException("The operation was aborted.", "AbortError");
+}
+
+/**
+ * Stop a run the server is still working on.
+ *
+ * A disconnect cannot do this: the server drives the stream through a threadpool
+ * iterator it never closes, so hanging up frees the run only whenever the garbage
+ * collector reaches it. Naming the run is what makes the stop immediate.
+ *
+ * Resolves false when there was no such run -- it can finish between the click and
+ * this request, which is not a failure worth showing anyone.
+ */
+export async function cancelRun(runId: string): Promise<boolean> {
+  const response = await post(`/api/runs/${encodeURIComponent(runId)}/cancel`, {});
+  if (response.status === 404) return false;
+  if (!response.ok) throw new ApiError(response.status, await errorDetail(response));
+  return true;
+}
+
+export type AskOptions = {
+  signal?: AbortSignal;
+  /** Minted by the caller so this run can be cancelled by name. */
+  runId?: string;
+};
 
 /** Run one question, reporting each event as it arrives. */
 export async function askStream(
   question: string,
   onEvent: (event: Event) => void,
-  signal?: AbortSignal
+  options: AskOptions = {}
 ): Promise<FinalEvent> {
-  const response = await post("/api/ask/stream", question, signal);
+  const { signal, runId } = options;
+  const response = await post(
+    "/api/ask/stream",
+    runId === undefined ? { question } : { question, run_id: runId },
+    signal
+  );
   if (!response.ok) {
     throw new StreamUnavailableError(await errorDetail(response));
   }
@@ -76,6 +108,10 @@ export async function askStream(
     signal
   );
 
+  // Cancelling ends the stream server-side, so a stopped run can arrive here as a
+  // clean end with no final. Reporting that as a truncated stream would blame the
+  // server for what the person watching just asked for.
+  if (signal?.aborted) throw aborted();
   if (outcome.failure !== null) throw new Error(outcome.failure);
   if (outcome.final === null) {
     // The awaited route enforces this server-side; the streaming route does not.
@@ -89,7 +125,7 @@ export async function ask(
   question: string,
   signal?: AbortSignal
 ): Promise<FinalEvent> {
-  const response = await post("/api/ask", question, signal);
+  const response = await post("/api/ask", { question }, signal);
   if (!response.ok) {
     throw new ApiError(response.status, await errorDetail(response));
   }

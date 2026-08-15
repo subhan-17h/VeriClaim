@@ -21,6 +21,8 @@ export type Turn = {
   final: FinalEvent | null;
   error: string | null;
   running: boolean;
+  /** Stopped by the person who asked it, rather than by a failure. */
+  stopped: boolean;
 };
 
 export function turnFromEvent(turn: Turn, event: Event): Turn {
@@ -68,7 +70,11 @@ export function Message({ turn }: { turn: Turn }) {
           <Ico.Spark className="spark" />
         </div>
         <div className="msg-col">
-          <Stages stages={turn.stages} running={turn.running} />
+          <Stages
+            stages={turn.stages}
+            running={turn.running}
+            stopped={turn.stopped}
+          />
 
           {final && (
             <>
@@ -102,6 +108,15 @@ export function Message({ turn }: { turn: Turn }) {
 
               <EvidenceCards evidence={evidence} citations={final.citations} />
             </>
+          )}
+
+          {/* A stopped run is not a failed one. It reached the stages shown above
+              and no further, and has no answer because none was asked for. */}
+          {turn.stopped && (
+            <div className="verdict unchecked">
+              Stopped before this run finished. What it had reached is shown above;
+              there is no answer to draw from.
+            </div>
           )}
 
           {turn.error && <div className="api-error">{turn.error}</div>}

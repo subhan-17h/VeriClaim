@@ -31,10 +31,12 @@ function label(name: string): string {
 
 export function Stages({
   stages,
-  running
+  running,
+  stopped = false
 }: {
   stages: StageEvent[];
   running: boolean;
+  stopped?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [, setTick] = useState(0);
@@ -58,13 +60,16 @@ export function Stages({
     return (
       <button
         type="button"
-        className="stage-summary"
+        className={"stage-summary" + (stopped ? " stopped" : "")}
         onClick={() => setExpanded(true)}
       >
-        <Ico.Check />
+        {/* A run that was stopped reached these steps; it did not pass them. The
+            green tick would say it finished. */}
+        {stopped ? <Ico.Stop /> : <Ico.Check />}
         <span>
           {stages.length} steps in {(total / 1000).toFixed(1)}s
           {failed > 0 ? `, ${failed} failed` : ""}
+          {stopped ? ", then stopped" : ""}
         </span>
       </button>
     );

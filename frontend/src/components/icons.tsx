@@ -39,7 +39,8 @@ export const Ico = {
   ),
   Grid: S("M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"),
   Scan: S("M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4M7 12h10"),
-  Spark: S("M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z")
+  Spark: S("M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2z"),
+  Stop: S("M7 7h10v10H7z")
 };
 
 /** The icon that stands for a source type, wherever evidence is labelled. */

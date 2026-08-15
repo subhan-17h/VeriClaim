@@ -5,7 +5,7 @@ import { EmptyState } from "./components/EmptyState";
 import { Message, turnFromEvent } from "./components/Message";
 import type { Turn } from "./components/Message";
 import { Sidebar } from "./components/Sidebar";
-import { askStream } from "./lib/api";
+import { askStream, cancelRun } from "./lib/api";
 import { load, save, titleFromQuestion } from "./lib/history";
 import type { Conversation } from "./lib/history";
 
@@ -15,6 +15,10 @@ const THEME_KEY = "vericlaim.theme";
 
 function newId(): string {
   return Math.random().toString(36).slice(2, 10);
+}
+
+function isAbort(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function storedTheme(): Theme {
@@ -33,6 +37,9 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(false);
   const [theme, setTheme] = useState<Theme>(storedTheme);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // What the stop button acts on: the run's name on the server, and this page's
+  // side of the connection.
+  const live = useRef<{ runId: string; abort: AbortController } | null>(null);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -59,7 +66,8 @@ export default function App() {
       stages: [],
       final: null,
       error: null,
-      running: true
+      running: true,
+      stopped: false
     };
     setTurns((seen) => [...seen, current]);
     setBusy(true);
@@ -69,15 +77,28 @@ export default function App() {
       setTurns((seen) => seen.map((turn) => (turn.id === next.id ? next : turn)));
     };
 
+    const runId = newId();
+    const abort = new AbortController();
+    live.current = { runId, abort };
+
     try {
-      await askStream(question, (event) => update(turnFromEvent(current, event)));
-    } catch (error) {
-      update({
-        ...current,
-        running: false,
-        error: error instanceof Error ? error.message : String(error)
+      await askStream(question, (event) => update(turnFromEvent(current, event)), {
+        signal: abort.signal,
+        runId
       });
+    } catch (error) {
+      // A stop is not a failure, and must not be reported as one.
+      update(
+        isAbort(error)
+          ? { ...current, running: false, stopped: true }
+          : {
+              ...current,
+              running: false,
+              error: error instanceof Error ? error.message : String(error)
+            }
+      );
     } finally {
+      live.current = null;
       setBusy(false);
       const settled: Turn = { ...current, running: false };
       setTurns((seen) => {
@@ -99,6 +120,18 @@ export default function App() {
         return next;
       });
     }
+  };
+
+  const stop = () => {
+    const running = live.current;
+    if (!running) return;
+    // Tell the server first: aborting only closes this page's connection, which the
+    // server may not notice for a long time, and the run would keep spending.
+    void cancelRun(running.runId).catch(() => {
+      // Already finished, or the request itself failed. Either way the abort below
+      // is what this page needs, and there is nothing here to tell anyone.
+    });
+    running.abort.abort();
   };
 
   const openConversation = (id: string) => {
@@ -155,7 +188,7 @@ export default function App() {
             </div>
           </div>
         </div>
-        <Composer onSend={send} busy={busy} />
+        <Composer onSend={send} onStop={stop} busy={busy} />
       </main>
     </div>
   );
