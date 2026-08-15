@@ -227,10 +227,15 @@ def test_an_undocumented_table_is_not_found() -> None:
     assert response.status_code == 404
 
 
-def test_opening_a_table_runs_no_query() -> None:
-    """This test is marked neither postgres nor ollama, and passes with both absent.
-
-    Opening a source must not re-query: the rows a fresh query returned need not be
-    the rows the answer used, and the query would sit outside the validated path.
+def test_opening_a_table_runs_no_query(monkeypatch) -> None:
+    """Opening a source must not re-query, enforced directly rather than by relying on
+    Postgres being unreachable: the rows a fresh query returned need not be the rows
+    the answer used, and the query would sit outside the validated path.
     """
+
+    def _forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("opening a source must not touch the database")
+
+    monkeypatch.setattr("vericlaim.sql.db.default_database", _forbidden)
+
     assert _table_client().get("/api/sources/sql/ops.claims").status_code == 200
