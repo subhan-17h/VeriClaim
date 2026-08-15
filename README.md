@@ -6,6 +6,11 @@ A multi-source agentic system for property insurance. One natural-language busin
 routed across **four heterogeneous enterprise sources** and answered once, with citations that trace
 every material claim back to its origin.
 
+![VeriClaim system architecture](docs/architecture.svg)
+
+<sub>Also available as a standalone page with PNG and PDF export:
+[`docs/architecture.html`](docs/architecture.html)</sub>
+
 | Source | Kind | Cited as |
 |---|---|---|
 | Policy documents | Unstructured text (RAG) | document › page › clause |
@@ -41,12 +46,7 @@ header at row 3 — with cited row 4 highlighted, holding the exact figures the 
 
 ## Architecture
 
-![VeriClaim system architecture](docs/architecture.svg)
-
-<sub>Also available as a standalone page with PNG and PDF export:
-[`docs/architecture.html`](docs/architecture.html)</sub>
-
-Three properties hold across the whole system:
+The diagram at the top of this page is the whole system. Three properties hold across all of it:
 
 - **Every tool returns `Evidence` and nothing else.** Synthesis never sees raw tool output, so an
   answer cannot quietly rest on something that was never recorded as evidence.
