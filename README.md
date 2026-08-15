@@ -17,44 +17,85 @@ The system determines which sources a question actually requires, executes only 
 returned evidence rather than concatenating it, and refuses or qualifies when the evidence is
 insufficient.
 
-> Status: in development. See [tasks/todo.md](tasks/todo.md) for the roadmap and
-> [docs/superpowers/specs/2026-08-10-vericlaim-design.md](docs/superpowers/specs/2026-08-10-vericlaim-design.md)
-> for the design.
+## The interface
+
+![VeriClaim answering a four-source question](docs/screenshots/answer.png)
+
+One question, routed across four sources, answered with `[E1]`-style citations that are links: each
+one scrolls to the evidence it names. Every piece of evidence carries an **Open source** control that
+opens the origin itself — the policy PDF at its cited page, the spreadsheet with its cited row
+highlighted, or the reviewed schema of the table that was queried.
+
+![The source drawer, open beside the answer](docs/screenshots/source-drawer.png)
+
+*Above: `[E1]` opens `Landlord_Protect_2026.pdf` at page 3 — the clause the answer rests on.*
+
+![A spreadsheet citation opening the workbook at the cited row](docs/screenshots/spreadsheet-source.png)
+
+*Above: a cell-level citation opens the workbook as it was written — title banner, blank row,
+header at row 3 — with cited row 4 highlighted, holding the exact figures the answer quotes.*
 
 ## Architecture
 
+```mermaid
+flowchart TB
+    UI["React + TypeScript SPA<br/>chat · live pipeline · evidence cards · source browser"]
+    API["FastAPI · /api/ask/stream<br/>NDJSON events · keepalive · cancellation"]
+
+    UI -->|"one question"| API
+    API -.->|"run_started · stage · evidence · final"| UI
+
+    subgraph ORCH["Orchestrator — LangGraph StateGraph"]
+        direction TB
+        U["understand"] --> R["route"] --> P["plan"]
+        P --> POL["policy<br/>hybrid RAG"]
+        P --> SQL["claims DB<br/>NL2SQL"]
+        P --> XLS["spreadsheets<br/>cell-level"]
+        P --> OCR["scanned docs<br/>OCR"]
+        POL & SQL & XLS & OCR --> EV["normalize → EvidenceSet"]
+        EV --> SUF{"sufficient?"}
+        SUF -->|"no · bounded, max 2 replans"| P
+        SUF -->|"yes"| SYN["synthesize · cited [En]"]
+        SYN --> VER["verify · citation resolution<br/>+ overclaim guard"]
+    end
+
+    API --> U
+    VER --> OUT["Answer + EvidenceSet + trace + cost/latency"]
+    OUT --> API
+
+    SAFE["SQL safety — deterministic, never model-mediated:<br/>sqlglot AST validation · table + column allow-lists<br/>LIMIT capping · statement timeout · read-only role"]
+    SQL --- SAFE
+
+    GW["Gateway — every LLM call<br/>fallback ladder · usage ledger · spend ceiling"]
+    U -.- GW
+    SYN -.- GW
 ```
-                       React + TypeScript SPA
-      chat · live agent trace · evidence cards · source browser
-                              │  NDJSON stream
-                              ▼
-                    FastAPI  /api/ask/stream
-                              │
-   ┌──────────────────────────▼───────────────────────────────┐
-   │        ORCHESTRATOR — LangGraph StateGraph               │
-   │                                                          │
-   │  understand ─▶ route ─▶ plan ─┐                          │
-   │      ▲                         │ only the routed sources │
-   │      │   ┌──────────┬──────────┴─┬────────────┬───────┐  │
-   │      │   ▼          ▼            ▼            ▼       │  │
-   │      │ policy    nl2sql     spreadsheet   scanned     │  │
-   │      │  RAG                                  OCR      │  │
-   │      │   └──────────┴──────┬─────┴────────────┘       │  │
-   │      │                     ▼                          │  │
-   │      │           normalize → EvidenceSet              │  │
-   │      │                     ▼                          │  │
-   │      │             sufficiency check                  │  │
-   │      └──── insufficient ───┤  bounded: MAX_REPLANS=2   │  │
-   │                       sufficient                       │  │
-   │                            ▼                           │  │
-   │                  synthesize (cited [En])               │  │
-   │                            ▼                           │  │
-   │        verify: citation resolution + overclaim guard   │  │
-   └────────────────────────────┬─────────────────────────────┘
-                                ▼
-              Answer + EvidenceSet + trace + cost/latency
-                └─────── every node traced → LangSmith
-```
+
+Every tool returns `Evidence` and nothing else; synthesis never sees raw tool output. Citations are
+`[En]` markers resolved deterministically against the evidence set — **an unresolvable marker is a
+hard failure, not a warning**.
+
+## What is built
+
+| Phase | Scope | State |
+|---|---|---|
+| C-1 | Gateway, provider ladder, usage ledger, spend ceiling | complete |
+| C-2 | Policy RAG — incremental index, hybrid retrieval, page provenance | complete |
+| C-3 | NL2SQL — AST validation, allow-lists, bounded repair, read-only role | complete |
+| C-4 | Scanned documents — OCR, confidence floor, vision escalation | complete |
+| C-5 | Spreadsheets — profiling, cell-level citation | complete |
+| C-6 | Evidence model, citation resolution, overclaim guard | complete |
+| C-7 | Orchestrator graph — route, plan, collect, sufficiency, synthesize, verify | complete |
+| C-8 | Integration across all four sources | complete |
+| C-9 | HTTP API, NDJSON streaming, source endpoints, cancellation | complete |
+| C-10 | Frontend — chat, evidence cards, source browser | partial |
+| C-11 | Evaluation suite — scorers, goldens, report | not started |
+| C-12 | Hardening and documentation | not started |
+
+Open in C-10: the live trace rail (C-10.3), the query metadata panel (C-10.6), and the evaluation
+view (C-10.7, which waits on C-11 because it renders results the evaluation suite has not produced
+yet). See [tasks/todo.md](tasks/todo.md) for the roadmap and
+[docs/superpowers/specs/](docs/superpowers/specs/) for the designs each phase was built from.
 
 Every tool returns `Evidence` and nothing else; synthesis never sees raw tool output. Citations are
 `[En]` markers resolved deterministically against the evidence set — **an unresolvable marker is a

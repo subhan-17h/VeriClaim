@@ -332,8 +332,8 @@ a question for C-11.2's coverage scorer over 40-60 goldens, not for one question
 - [x] **C-9.2** `api/app.py` — `/api/ask` + `/api/ask/stream`, keepalive. The SPA mount moves
       to C-10.1, where a `frontend/dist` to serve first exists. — `A` both
 - [x] **C-9.3** **Expose the trace and the executed SQL** (neither reference repo does). — `N`
-- [ ] **C-9.4** Source-browser endpoints incl. `#page=N` anchoring. — `A` CSRS
-- [ ] **C-9.5** Client cancellation. — `N`
+- [x] **C-9.4** Source-browser endpoints incl. `#page=N` anchoring. — `A` CSRS
+- [x] **C-9.5** Client cancellation. — `N`
 - [x] **C-9.6** Settle the three data-contract questions C-10.1 inherits, before generated
       types make them expensive: keep `EvidenceEvent.items` a list so batching stays a
       non-breaking change; type only the shapes that have a contract; and stop the state
@@ -351,7 +351,7 @@ a question for C-11.2's coverage scorer over 40-60 goldens, not for one question
 - [x] **C-10.2** Chat shell, streaming answer, history, on the CSRS design system. — `V` CSRS
 - [ ] **C-10.3** Live agent trace rail. — `V` CSRS + unibot reducers
 - [x] **C-10.4** Evidence cards, one renderer per source type. — `A` CSRS + `N`
-- [ ] **C-10.5** Source browser with page deep-linking. — `A` CSRS
+- [x] **C-10.5** Source browser with page deep-linking. — `A` CSRS
 - [ ] **C-10.6** Query metadata panel (models, tokens, cost, latency, fallbacks). — `N`
 - [ ] **C-10.7** Evaluation view. — `N`
 
@@ -1527,3 +1527,50 @@ The failed spreadsheet source was reported in full rather than quietly dropped.
 **Pruned on evidence.** 183 CSS rules removed, 1492 lines to 854, by grepping the
 components once they all existed rather than guessing beforehand. A check confirmed every
 class the components use survived.
+
+### C-9.4, C-9.5 and C-10.5 - the source browser, and the stop that stops
+
+**Cancellation could not be built on client disconnect, and measurement is what showed it.**
+The design approved before implementation had the server notice a hung-up connection and stop
+the run. Against a real uvicorn it does not: Starlette drives a sync stream through
+`iterate_in_threadpool`, which never closes the iterator it wraps, so the run is released only
+when the cyclic collector reaches it. At a flood of frames that took ~6s; at a realistic event
+pace the run was still going at 15s and stopped only on a forced `gc.collect()`. A stop that
+leaves paid model calls running is not a stop, so the client names its run and cancels it by
+name: `RunRegistry` holds each live run's flag, `POST /api/runs/{run_id}/cancel` trips it, and
+the worker reads it between events. Against a real server the run stops at the next node
+boundary -- 0.51s of a 0.5s node -- and a second cancel of the same run is 404. The disconnect
+path stays as a backstop, unreliable in timing and documented as such.
+
+**Registration is released by the run, not by the connection.** A client can hang up without the
+stream generator ever being finalized, so hanging deregistration off that generator left finished
+runs looking cancellable. It hangs off the worker's own `finally` instead.
+
+**A name from a client is looked up, never joined.** Every source route resolves against a
+catalog built from what exists -- the PDFs in each corpus directory, the `(workbook, sheet)`
+pairs the reviewed contexts declare, the qualified table names in `contexts/`. `../../etc/passwd`
+is not a name anybody has, which is stronger than sanitising input because no encoding defeats it.
+
+**Opening a SQL source runs no query.** A SQL claim has no file behind it; what it traces back to
+is the reviewed context of its table, reused verbatim from `context_detail` so the browser and the
+planner cannot disagree about what a table is. Re-querying was rejected: the rows a fresh query
+returns need not be the rows the answer used, and it would sit outside the validated plan path.
+The test that asserts this was rewritten during review -- as written it asserted only a 200, and
+Postgres was demonstrably reachable, so it would have passed had the route queried the database.
+It now monkeypatches `default_database` and was mutation-verified by making the route call it.
+
+**A spreadsheet is served as written, not as the profiler reads it.** These workbooks open with a
+title banner, then a blank row, then the header at row 3. `sheets/profiler.py` untangles that for
+ingestion; reproducing its judgement in the browser would show the reader the system's reading of
+the sheet while claiming to show the source.
+
+**The browser found what the tests could not.** Two defects surfaced only against a live run.
+The first was a stale server -- the routes 404'd because the process predated them, which is a
+deployment fact worth recording rather than a bug. The second was real: every spreadsheet
+citation this corpus produces carries an A1 range and no row number, so highlighting only on
+`locator.row` opened the workbook with nothing marked on it. The row is now read from the range,
+and an aggregate's range -- which names no row -- still highlights nothing.
+
+**Not claimed.** Phase C-10 is not complete. C-10.3 (trace rail), C-10.6 (metadata panel) and
+C-10.7 (evaluation view) remain open; C-10.7 waits on C-11, because it renders results the
+evaluation suite has not produced yet.
