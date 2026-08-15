@@ -86,25 +86,35 @@ never reaches the server.
 {
   "workbook": "Regional_Inspection_Compliance_Q1.xlsx",
   "sheet": "Compliance",
-  "columns": ["A", "B", "C"],
-  "header": ["region", "inspections_due", "inspections_done"],
-  "rows": [["North", "120", "98"], ...],
-  "first_row": 2,
-  "total_rows": 41,
+  "columns": ["A", "B", "C", "D", "E"],
+  "first_row": 1,
+  "rows": [
+    ["Regional Inspection Compliance - Q1", "", "", "", ""],
+    ["", "", "", "", ""],
+    ["region", "scheduled_inspections", "completed_inspections", "compliance_rate", "target_rate"],
+    ["Lahore Central", "110", "66", "60%", "0.85"]
+  ],
+  "total_rows": 13,
   "truncated": false
 }
 ```
 
-`header` is the sheet's first row; `rows` are the rows after it, so `first_row` is 2 for an untruncated
-sheet. Cells are stringified server-side, so the client renders what the sheet holds rather than
-reformatting a number into something the sheet does not say. `first_row` is the spreadsheet row number
-of `rows[0]`, which is what makes a locator's `row` addressable in the rendered grid. `columns` carries
-the A1 column letters, which is what makes a locator's `a1_range` addressable.
+**The grid is the sheet as written, not as interpreted.** There is no `header` field, because these
+sheets do not have their header in row 1 — `Regional_Inspection_Compliance_Q1.xlsx` opens with a title
+banner, then a blank row, then its header at row 3. `sheets/profiler.py` untangles that for ingestion
+precisely because a spreadsheet an analyst wrote is not a table. Reproducing that judgement here would
+show the reader the system's interpretation of the sheet while claiming to show them the source. The
+banner, the blank row and the header appear in `rows` where the sheet actually puts them.
+
+`rows[i]` is spreadsheet row `first_row + i`, which is what makes a locator's `row` addressable, and
+`columns` carries the A1 column letters, which is what makes its `a1_range` addressable. Cells are
+stringified server-side, so the client renders what the sheet holds rather than reformatting a number
+into something the sheet does not say; an empty cell is `""`.
 
 `total_rows` and `truncated` are both present because a capped grid must say so — a truncated sheet
 that looked complete would be a quiet lie about the source. The cap is 500 rows, an order of magnitude
-above the largest sheet in this corpus, so it bounds a pathological workbook without ever truncating a
-real one silently.
+above the largest sheet in this corpus (13 rows), so it bounds a pathological workbook without ever
+truncating a real one silently.
 
 **A SQL context** is `context_detail(context)` from `vericlaim.sql.contexts`, already the planning view
 of a reviewed table: purpose, columns with meanings and units, joins, cautions. Reused rather than
