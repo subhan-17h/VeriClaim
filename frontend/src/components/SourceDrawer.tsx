@@ -3,7 +3,12 @@ import { useEffect } from "react";
 import { PdfSource } from "./sources/PdfSource";
 import { SheetSource } from "./sources/SheetSource";
 import { TableSource } from "./sources/TableSource";
-import type { EvidenceItem, SheetGrid, SourceType } from "../types";
+import type {
+  EvidenceItem,
+  SheetGrid,
+  SourceType,
+  SpreadsheetLocator
+} from "../types";
 
 // A locator means something different in each source, so opening one does too. This is
 // the table the drawer actually renders through, not a second list kept for the test:
@@ -21,6 +26,21 @@ const RENDERER: Record<
 /** Exposed for test: every source type must be openable. */
 export function sourceRendererName(source: SourceType): string {
   return RENDERER[source].name;
+}
+
+/**
+ * Which spreadsheet row a locator cites.
+ *
+ * The row number is the better answer, but a cell-level citation in this corpus
+ * carries its range and no row number, so reading only `row` would leave every
+ * spreadsheet citation pointing at a sheet with nothing marked on it. A range that
+ * names no row -- which is what an aggregate over a whole sheet produces -- still
+ * highlights nothing, because there is no one row it belongs to.
+ */
+export function citedRow(locator: SpreadsheetLocator): number | null {
+  if (locator.row !== null) return locator.row;
+  const match = /^[A-Z]+(\d+)/.exec(locator.a1_range ?? "");
+  return match ? Number(match[1]) : null;
 }
 
 /** Exposed for test: which rendered row a locator's row number addresses. */

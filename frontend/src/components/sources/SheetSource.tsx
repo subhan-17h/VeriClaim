@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { fetchSheet } from "../../lib/sources";
-import { citedRowIndex } from "../SourceDrawer";
+import { citedRow, citedRowIndex } from "../SourceDrawer";
 import type { EvidenceItem, SheetGrid, SpreadsheetLocator } from "../../types";
 
 // Every renderer takes the whole item and reads the locator it knows, so one dispatch
@@ -32,13 +32,14 @@ export function SheetSource({ item }: { item: EvidenceItem }) {
   if (error) return <div className="source-state error">{error}</div>;
   if (!grid) return <div className="source-state">Opening the workbook...</div>;
 
-  const cited = citedRowIndex(grid, locator.row);
+  const row = citedRow(locator);
+  const cited = citedRowIndex(grid, row);
 
   return (
     <>
       <div className="source-meta">
         {grid.workbook} › {grid.sheet}
-        {locator.row === null ? "" : ` › row ${locator.row}`}
+        {row === null ? "" : ` › row ${row}`}
         {locator.a1_range ? ` › ${locator.a1_range}` : ""}
       </div>
       {grid.truncated && (
