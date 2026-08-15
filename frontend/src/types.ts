@@ -159,3 +159,32 @@ export const EVENT_NAMES = [
   "final",
   "error"
 ] as const;
+
+// What GET /api/sources/spreadsheet/{workbook}/{sheet} returns. The sheet as written:
+// rows[i] is spreadsheet row first_row + i, banner and blank rows included.
+export type SheetGrid = {
+  workbook: string;
+  sheet: string;
+  columns: string[];
+  first_row: number;
+  rows: string[][];
+  total_rows: number;
+  truncated: boolean;
+};
+
+export type TableColumn = {
+  name: string;
+  type: string;
+  meaning: string;
+  unit?: string;
+};
+
+// What GET /api/sources/sql/{table} returns: context_detail's planning view.
+export type TableContext = {
+  table: string;
+  purpose: string;
+  columns: TableColumn[];
+  useful_for: string[];
+  joins: { column: string; references: string; meaning: string }[];
+  cautions: string[];
+};
