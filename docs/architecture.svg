@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1040" width="1240" height="1040" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b"/>
+    </marker>
+    <marker id="arrowRose" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fb7185"/>
+    </marker>
+    <marker id="arrowCyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+    </marker>
+  </defs>
+
+  <rect width="1240" height="1040" fill="#020617"/>
+  <rect width="1240" height="1040" fill="url(#grid)"/>
+
+  <text x="48" y="46" fill="#f8fafc" font-size="17" font-weight="700">VeriClaim — system architecture</text>
+  <text x="48" y="68" fill="#94a3b8" font-size="10">One question · four heterogeneous sources · one answer where every material claim cites its origin</text>
+
+  <!-- ================= arrows drawn first, so boxes paint over them ================= -->
+
+  <!-- SPA <-> API -->
+  <path d="M 560 154 L 560 186" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 700 186 L 700 154" stroke="#22d3ee" stroke-width="1.5" fill="none" stroke-dasharray="4,4" marker-end="url(#arrowCyan)"/>
+
+  <!-- API -> orchestrator, entering at the first node -->
+  <path d="M 620 282 L 620 336 L 210 336 L 210 356" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- understand -> route -> plan -->
+  <path d="M 310 383 L 346 383" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 550 383 L 586 383" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- plan -> fan-out rail -> four sources -->
+  <path d="M 690 406 L 690 430" stroke="#64748b" stroke-width="1.5" fill="none"/>
+  <path d="M 198 430 L 1062 430" stroke="#64748b" stroke-width="1.5" fill="none"/>
+  <path d="M 198 430 L 198 440" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 486 430 L 486 440" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 774 430 L 774 440" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 1062 430 L 1062 440" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- four sources -> collect rail -->
+  <path d="M 198 534 L 198 566" stroke="#64748b" stroke-width="1.5" fill="none"/>
+  <path d="M 486 534 L 486 566" stroke="#64748b" stroke-width="1.5" fill="none"/>
+  <path d="M 774 534 L 774 566" stroke="#64748b" stroke-width="1.5" fill="none"/>
+  <path d="M 1062 534 L 1062 566" stroke="#64748b" stroke-width="1.5" fill="none"/>
+  <path d="M 198 566 L 1062 566" stroke="#64748b" stroke-width="1.5" fill="none"/>
+  <path d="M 620 566 L 620 582" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- spine: collect -> sufficiency -> synthesize -> verify -->
+  <path d="M 620 636 L 620 662" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 620 712 L 620 738" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 620 788 L 620 814" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- bounded replan loop: sufficiency -> back to plan -->
+  <path d="M 390 689 L 66 689 L 66 414 L 640 414 L 640 410" stroke="#fb7185" stroke-width="1.5" fill="none" stroke-dasharray="5,4" marker-end="url(#arrowRose)"/>
+  <text x="82" y="668" fill="#fb7185" font-size="8">insufficient → replan</text>
+  <text x="82" y="680" fill="#fb7185" font-size="8">bounded · max 2</text>
+
+  <!-- verify -> output -->
+  <path d="M 620 864 L 620 904" stroke="#64748b" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- gateway / tracing dashed links -->
+  <path d="M 183 904 L 183 878" stroke="#fbbf24" stroke-width="1.5" fill="none" stroke-dasharray="4,4"/>
+  <path d="M 1057 904 L 1057 878" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-dasharray="4,4"/>
+
+  <!-- ================= orchestrator boundary ================= -->
+  <rect x="48" y="318" width="1144" height="560" rx="12" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="8,4"/>
+  <text x="1176" y="340" fill="#34d399" font-size="9" text-anchor="end">LangGraph StateGraph · orchestrator</text>
+
+  <!-- ================= client ================= -->
+  <rect x="380" y="92" width="480" height="62" rx="6" fill="#0f172a"/>
+  <rect x="380" y="92" width="480" height="62" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="620" y="118" fill="#ffffff" font-size="12" font-weight="600" text-anchor="middle">React 18 + TypeScript SPA</text>
+  <text x="620" y="138" fill="#94a3b8" font-size="9" text-anchor="middle">chat · live pipeline · evidence cards · citation links · source browser</text>
+  <text x="712" y="176" fill="#22d3ee" font-size="8">NDJSON events</text>
+
+  <!-- ================= api ================= -->
+  <rect x="300" y="190" width="640" height="92" rx="6" fill="#0f172a"/>
+  <rect x="300" y="190" width="640" height="92" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="620" y="214" fill="#ffffff" font-size="12" font-weight="600" text-anchor="middle">FastAPI</text>
+  <text x="620" y="234" fill="#94a3b8" font-size="8.5" text-anchor="middle">POST /api/ask/stream — run_started · stage · evidence · final, with keepalive</text>
+  <text x="620" y="250" fill="#94a3b8" font-size="8.5" text-anchor="middle">POST /api/runs/{run_id}/cancel — stops the run at the next node boundary</text>
+  <text x="620" y="266" fill="#94a3b8" font-size="8.5" text-anchor="middle">GET /api/sources/… — opens the origin a citation names (name looked up, never joined)</text>
+
+  <!-- ================= pipeline: understand / route / plan ================= -->
+  <rect x="110" y="360" width="200" height="46" rx="6" fill="#0f172a"/>
+  <rect x="110" y="360" width="200" height="46" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="210" y="380" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">understand</text>
+  <text x="210" y="396" fill="#94a3b8" font-size="8" text-anchor="middle">entities · timeframe · intent</text>
+
+  <rect x="350" y="360" width="200" height="46" rx="6" fill="#0f172a"/>
+  <rect x="350" y="360" width="200" height="46" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="450" y="380" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">route</text>
+  <text x="450" y="396" fill="#94a3b8" font-size="8" text-anchor="middle">which sources this needs</text>
+
+  <rect x="590" y="360" width="200" height="46" rx="6" fill="#0f172a"/>
+  <rect x="590" y="360" width="200" height="46" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="690" y="380" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">plan</text>
+  <text x="690" y="396" fill="#94a3b8" font-size="8" text-anchor="middle">sub-goals per source</text>
+
+  <text x="1176" y="422" fill="#64748b" font-size="8" text-anchor="end">only the sources the question actually requires are executed</text>
+
+  <!-- ================= four sources ================= -->
+  <rect x="70" y="444" width="256" height="90" rx="6" fill="#0f172a"/>
+  <rect x="70" y="444" width="256" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="198" y="468" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Policy documents</text>
+  <text x="198" y="488" fill="#94a3b8" font-size="8" text-anchor="middle">unstructured PDF · RAG</text>
+  <text x="198" y="503" fill="#94a3b8" font-size="8" text-anchor="middle">Chroma + BM25, RRF fusion</text>
+  <text x="198" y="524" fill="#a78bfa" font-size="8" text-anchor="middle">document › page › clause</text>
+
+  <rect x="358" y="444" width="256" height="90" rx="6" fill="#0f172a"/>
+  <rect x="358" y="444" width="256" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="486" y="468" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Claims database</text>
+  <text x="486" y="488" fill="#94a3b8" font-size="8" text-anchor="middle">PostgreSQL · NL2SQL</text>
+  <text x="486" y="503" fill="#fb7185" font-size="8" text-anchor="middle">sqlglot AST · allow-lists · read-only role</text>
+  <text x="486" y="524" fill="#a78bfa" font-size="8" text-anchor="middle">table + the executed query</text>
+
+  <rect x="646" y="444" width="256" height="90" rx="6" fill="#0f172a"/>
+  <rect x="646" y="444" width="256" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="774" y="468" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Operational spreadsheets</text>
+  <text x="774" y="488" fill="#94a3b8" font-size="8" text-anchor="middle">semi-structured workbooks</text>
+  <text x="774" y="503" fill="#94a3b8" font-size="8" text-anchor="middle">openpyxl profiler · row lineage</text>
+  <text x="774" y="524" fill="#a78bfa" font-size="8" text-anchor="middle">workbook › sheet › row › A1</text>
+
+  <rect x="934" y="444" width="256" height="90" rx="6" fill="#0f172a"/>
+  <rect x="934" y="444" width="256" height="90" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1062" y="468" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Scanned documents</text>
+  <text x="1062" y="488" fill="#94a3b8" font-size="8" text-anchor="middle">images of text · OCR</text>
+  <text x="1062" y="503" fill="#94a3b8" font-size="8" text-anchor="middle">confidence floor · vision escalation</text>
+  <text x="1062" y="524" fill="#a78bfa" font-size="8" text-anchor="middle">document › page + confidence</text>
+
+  <!-- ================= collect / sufficiency / synthesize / verify ================= -->
+  <rect x="340" y="586" width="560" height="50" rx="6" fill="#0f172a"/>
+  <rect x="340" y="586" width="560" height="50" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="620" y="608" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">collect → normalize → EvidenceSet</text>
+  <text x="620" y="626" fill="#94a3b8" font-size="8" text-anchor="middle">every tool returns Evidence and nothing else — synthesis never sees raw tool output</text>
+
+  <rect x="390" y="666" width="460" height="46" rx="6" fill="#0f172a"/>
+  <rect x="390" y="666" width="460" height="46" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="620" y="686" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">sufficiency check</text>
+  <text x="620" y="702" fill="#94a3b8" font-size="8" text-anchor="middle">does the gathered evidence actually answer the question?</text>
+
+  <rect x="390" y="742" width="460" height="46" rx="6" fill="#0f172a"/>
+  <rect x="390" y="742" width="460" height="46" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="620" y="762" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">synthesize</text>
+  <text x="620" y="778" fill="#94a3b8" font-size="8" text-anchor="middle">decision-support language · never asserts a coverage decision</text>
+
+  <rect x="390" y="818" width="460" height="46" rx="6" fill="#0f172a"/>
+  <rect x="390" y="818" width="460" height="46" rx="6" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.5"/>
+  <text x="620" y="838" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">verify</text>
+  <text x="620" y="854" fill="#94a3b8" font-size="8" text-anchor="middle">citation resolution + overclaim guard · unresolvable [En] is a hard failure</text>
+
+  <!-- ================= gateway / output / tracing ================= -->
+  <rect x="48" y="904" width="270" height="58" rx="6" fill="#0f172a"/>
+  <rect x="48" y="904" width="270" height="58" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="183" y="926" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Model gateway</text>
+  <text x="183" y="942" fill="#94a3b8" font-size="8" text-anchor="middle">every LLM call · fallback ladder</text>
+  <text x="183" y="955" fill="#94a3b8" font-size="8" text-anchor="middle">usage ledger · persisted spend ceiling</text>
+
+  <rect x="340" y="904" width="560" height="58" rx="6" fill="#0f172a"/>
+  <rect x="340" y="904" width="560" height="58" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="620" y="926" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">Answer + EvidenceSet + trace + cost &amp; latency</text>
+  <text x="620" y="942" fill="#94a3b8" font-size="8" text-anchor="middle">streamed back to the SPA as it happens; each [En] links to the evidence,</text>
+  <text x="620" y="955" fill="#94a3b8" font-size="8" text-anchor="middle">and each piece of evidence opens the source it came from</text>
+
+  <rect x="922" y="904" width="270" height="58" rx="6" fill="#0f172a"/>
+  <rect x="922" y="904" width="270" height="58" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="1057" y="926" fill="#ffffff" font-size="11" font-weight="600" text-anchor="middle">LangSmith tracing</text>
+  <text x="1057" y="942" fill="#94a3b8" font-size="8" text-anchor="middle">every node traced under one</text>
+  <text x="1057" y="955" fill="#94a3b8" font-size="8" text-anchor="middle">root span, keyed by trace id</text>
+
+  <!-- ================= legend ================= -->
+  <rect x="48" y="990" width="12" height="12" rx="2" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.2"/>
+  <text x="66" y="1000" fill="#94a3b8" font-size="8.5">client / output</text>
+  <rect x="190" y="990" width="12" height="12" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.2"/>
+  <text x="208" y="1000" fill="#94a3b8" font-size="8.5">API / orchestrator node</text>
+  <rect x="390" y="990" width="12" height="12" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.2"/>
+  <text x="408" y="1000" fill="#94a3b8" font-size="8.5">evidence source (and how it is cited)</text>
+  <rect x="680" y="990" width="12" height="12" rx="2" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1.2"/>
+  <text x="698" y="1000" fill="#94a3b8" font-size="8.5">safety / integrity gate</text>
+  <rect x="880" y="990" width="12" height="12" rx="2" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.2"/>
+  <text x="898" y="1000" fill="#94a3b8" font-size="8.5">cost control</text>
+  <rect x="1020" y="990" width="12" height="12" rx="2" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.2"/>
+  <text x="1038" y="1000" fill="#94a3b8" font-size="8.5">observability</text>
+</svg>

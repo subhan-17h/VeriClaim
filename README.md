@@ -17,6 +17,10 @@ The system determines which sources a question actually requires, executes only 
 returned evidence rather than concatenating it, and refuses or qualifies when the evidence is
 insufficient.
 
+The hard part is not retrieval from any one of these. It is that a single question can span all four,
+and that an answer drawn from them is only worth anything if a reader can get back to where each
+number came from — a page in a policy, a row in somebody's workbook, the query that was run.
+
 ## The interface
 
 ![VeriClaim answering a four-source question](docs/screenshots/answer.png)
@@ -37,43 +41,20 @@ header at row 3 — with cited row 4 highlighted, holding the exact figures the 
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    UI["React + TypeScript SPA<br/>chat · live pipeline · evidence cards · source browser"]
-    API["FastAPI · /api/ask/stream<br/>NDJSON events · keepalive · cancellation"]
+![VeriClaim system architecture](docs/architecture.svg)
 
-    UI -->|"one question"| API
-    API -.->|"run_started · stage · evidence · final"| UI
+<sub>Also available as a standalone page with PNG and PDF export:
+[`docs/architecture.html`](docs/architecture.html)</sub>
 
-    subgraph ORCH["Orchestrator — LangGraph StateGraph"]
-        direction TB
-        U["understand"] --> R["route"] --> P["plan"]
-        P --> POL["policy<br/>hybrid RAG"]
-        P --> SQL["claims DB<br/>NL2SQL"]
-        P --> XLS["spreadsheets<br/>cell-level"]
-        P --> OCR["scanned docs<br/>OCR"]
-        POL & SQL & XLS & OCR --> EV["normalize → EvidenceSet"]
-        EV --> SUF{"sufficient?"}
-        SUF -->|"no · bounded, max 2 replans"| P
-        SUF -->|"yes"| SYN["synthesize · cited [En]"]
-        SYN --> VER["verify · citation resolution<br/>+ overclaim guard"]
-    end
+Three properties hold across the whole system:
 
-    API --> U
-    VER --> OUT["Answer + EvidenceSet + trace + cost/latency"]
-    OUT --> API
-
-    SAFE["SQL safety — deterministic, never model-mediated:<br/>sqlglot AST validation · table + column allow-lists<br/>LIMIT capping · statement timeout · read-only role"]
-    SQL --- SAFE
-
-    GW["Gateway — every LLM call<br/>fallback ladder · usage ledger · spend ceiling"]
-    U -.- GW
-    SYN -.- GW
-```
-
-Every tool returns `Evidence` and nothing else; synthesis never sees raw tool output. Citations are
-`[En]` markers resolved deterministically against the evidence set — **an unresolvable marker is a
-hard failure, not a warning**.
+- **Every tool returns `Evidence` and nothing else.** Synthesis never sees raw tool output, so an
+  answer cannot quietly rest on something that was never recorded as evidence.
+- **Citations are resolved deterministically**, not judged by a model. `[En]` markers are matched
+  against the evidence set, and **an unresolvable marker is a hard failure, not a warning** — the
+  answer is regenerated rather than shipped.
+- **Only the sources a question actually requires are executed.** Routing is a decision the graph
+  records, not a fan-out to everything available.
 
 ## What is built
 
@@ -97,9 +78,7 @@ view (C-10.7, which waits on C-11 because it renders results the evaluation suit
 yet). See [tasks/todo.md](tasks/todo.md) for the roadmap and
 [docs/superpowers/specs/](docs/superpowers/specs/) for the designs each phase was built from.
 
-Every tool returns `Evidence` and nothing else; synthesis never sees raw tool output. Citations are
-`[En]` markers resolved deterministically against the evidence set — **an unresolvable marker is a
-hard failure, not a warning**.
+Verified at this commit: **1,544 Python tests** and **44 frontend tests** passing, `ruff` clean.
 
 ## Setup
 
@@ -124,9 +103,17 @@ uv run python scripts/verify_providers.py                    # check credentials
 uv run python scripts/verify_providers.py --paid             # ... including one billed call
 uv run python scripts/spend.py                               # what has been spent so far
 uv run python scripts/smoke.py                               # prove the read-only role rejects DDL
-uv run python eval/run.py                                    # evaluation suite
-cd frontend && npm run build                                 # frontend build
+cd frontend && npm test && npm run build                     # frontend tests, then build
 ```
+
+Then run it:
+
+```bash
+uv run uvicorn vericlaim.api.app:app --port 8000             # http://localhost:8000
+```
+
+The API serves the built SPA when `frontend/dist` exists and runs headless when it does not, so a
+checkout that has never seen Node still works.
 
 ## Cost control
 
