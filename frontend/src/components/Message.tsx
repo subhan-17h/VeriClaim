@@ -5,7 +5,7 @@ import { EvidenceCards } from "./EvidenceCard";
 import { Ico } from "./icons";
 import { Stages } from "./Stages";
 import { withCitations } from "../lib/citations";
-import type { Event, FinalEvent, StageEvent } from "../types";
+import type { Event, EvidenceItem, FinalEvent, StageEvent } from "../types";
 
 /**
  * One question and everything the run reported about answering it.
@@ -52,7 +52,13 @@ function Verdict({ final }: { final: FinalEvent }) {
   return null;
 }
 
-export function Message({ turn }: { turn: Turn }) {
+export function Message({
+  turn,
+  onOpenSource
+}: {
+  turn: Turn;
+  onOpenSource: (item: EvidenceItem) => void;
+}) {
   const final = turn.final;
   const evidence = final?.evidence ?? [];
 
@@ -106,7 +112,11 @@ export function Message({ turn }: { turn: Turn }) {
                 </div>
               )}
 
-              <EvidenceCards evidence={evidence} citations={final.citations} />
+              <EvidenceCards
+                evidence={evidence}
+                citations={final.citations}
+                onOpenSource={onOpenSource}
+              />
             </>
           )}
 

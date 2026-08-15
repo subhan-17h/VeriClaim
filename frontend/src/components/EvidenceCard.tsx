@@ -32,10 +32,12 @@ const ORDER: SourceType[] = ["policy", "sql", "spreadsheet", "scanned_pdf"];
 
 export function EvidenceCards({
   evidence,
-  citations
+  citations,
+  onOpenSource
 }: {
   evidence: EvidenceItem[];
   citations: CitationReport;
+  onOpenSource: (item: EvidenceItem) => void;
 }) {
   const [open, setOpen] = useState<SourceType | null>(null);
   if (evidence.length === 0) return null;
@@ -93,6 +95,13 @@ export function EvidenceCards({
                     {!cited.has(item.id) && (
                       <span className="ev-uncited">not cited</span>
                     )}
+                    <button
+                      type="button"
+                      className="ev-open"
+                      onClick={() => onOpenSource(item)}
+                    >
+                      Open source
+                    </button>
                   </div>
                   <Renderer item={item} />
                 </article>

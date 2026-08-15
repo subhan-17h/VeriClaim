@@ -865,3 +865,88 @@ table.data td.key { color: var(--text); font-weight: 500; font-family: 'Geist Mo
   color: #FCA5A5; background: rgba(248,113,113,.10);
   border-color: rgba(248,113,113,.30); cursor: default;
 }
+
+/* ============================================================
+   Source drawer: the last step of the trace, beside the answer
+   ============================================================ */
+.ev-open {
+  margin-left: auto; font: inherit; font-size: 11.5px; cursor: pointer;
+  background: var(--soft); color: var(--text-2);
+  border: 1px solid var(--border-muted); border-radius: var(--r-xs);
+  padding: 3px 9px; transition: color .18s var(--ease), border-color .18s var(--ease);
+}
+.ev-open:hover { color: var(--text); border-color: var(--border); }
+
+.source-drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(46%, 620px);
+  display: flex; flex-direction: column;
+  background: var(--surface); border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg); z-index: 20;
+}
+.source-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid var(--border-muted);
+}
+.source-head .source-id {
+  font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--cyan);
+}
+.source-head .source-label { font-size: 12.5px; color: var(--text-2); }
+.source-close {
+  margin-left: auto; font: inherit; font-size: 12px; cursor: pointer;
+  background: none; border: 1px solid var(--border-muted); border-radius: var(--r-xs);
+  color: var(--text-2); padding: 4px 10px;
+}
+.source-close:hover { color: var(--text); border-color: var(--border); }
+.source-body { flex: 1; overflow: auto; padding: 14px 16px; }
+.source-meta {
+  font-family: 'Geist Mono', monospace; font-size: 11px;
+  color: var(--text-muted); margin-bottom: 10px; word-break: break-word;
+}
+.source-frame {
+  width: 100%; height: 100%; min-height: 60vh; border: 1px solid var(--border-muted);
+  border-radius: var(--r-sm); background: var(--elevated);
+}
+.source-state { font-size: 12.5px; color: var(--text-muted); padding: 8px 0; }
+.source-state.error { color: var(--text-2); }
+
+.source-grid-wrap { overflow: auto; border: 1px solid var(--border-muted); border-radius: var(--r-sm); }
+.source-grid { border-collapse: collapse; font-size: 12px; width: 100%; }
+.source-grid th, .source-grid td {
+  border: 1px solid var(--border-muted); padding: 4px 8px;
+  text-align: left; white-space: nowrap; color: var(--text-2);
+}
+.source-grid thead th, .source-grid tbody th {
+  background: var(--soft); color: var(--text-muted);
+  font-family: 'Geist Mono', monospace; font-size: 10.5px; font-weight: 500;
+}
+.source-grid tr.cited td, .source-grid tr.cited th {
+  background: var(--cyan-soft); color: var(--text);
+}
+
+.source-sql {
+  font-family: 'Geist Mono', monospace; font-size: 11.5px; line-height: 1.6;
+  background: var(--elevated); border: 1px solid var(--border-muted);
+  border-radius: var(--r-sm); padding: 10px 12px; overflow-x: auto;
+  color: var(--text-2); white-space: pre-wrap; word-break: break-word;
+}
+.source-table { margin-top: 16px; }
+.source-table h3 {
+  font-family: 'Geist Mono', monospace; font-size: 12px; color: var(--text);
+  margin: 0 0 6px;
+}
+.source-table p { font-size: 12.5px; color: var(--text-2); margin: 0 0 10px; }
+.source-columns { border-collapse: collapse; width: 100%; font-size: 12px; }
+.source-columns th, .source-columns td {
+  border-top: 1px solid var(--border-muted); padding: 6px 8px;
+  text-align: left; vertical-align: top; color: var(--text-2);
+}
+.source-columns th { font-family: 'Geist Mono', monospace; font-size: 11px; color: var(--text); font-weight: 500; }
+.source-columns .source-type { color: var(--text-muted); white-space: nowrap; }
+.source-cautions { margin: 10px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-muted); }
+.source-cautions li { margin-bottom: 4px; }
+
+/* The thread narrows rather than being replaced, so the claim stays beside its source.
+   .thread-scroll is `position: absolute; inset: 0`, which ignores padding on .stage --
+   its `right` is what has to move. */
+.app.source-open .thread-scroll { right: min(46%, 620px); }
+.app.source-open .composer-dock { padding-right: calc(28px + min(46%, 620px)); }

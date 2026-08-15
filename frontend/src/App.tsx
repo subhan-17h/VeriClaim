@@ -5,9 +5,11 @@ import { EmptyState } from "./components/EmptyState";
 import { Message, turnFromEvent } from "./components/Message";
 import type { Turn } from "./components/Message";
 import { Sidebar } from "./components/Sidebar";
+import { SourceDrawer } from "./components/SourceDrawer";
 import { askStream, cancelRun } from "./lib/api";
 import { load, save, titleFromQuestion } from "./lib/history";
 import type { Conversation } from "./lib/history";
+import type { EvidenceItem } from "./types";
 
 type Theme = "dark" | "light";
 
@@ -36,6 +38,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [theme, setTheme] = useState<Theme>(storedTheme);
+  const [source, setSource] = useState<EvidenceItem | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // What the stop button acts on: the run's name on the server, and this page's
   // side of the connection.
@@ -163,7 +166,10 @@ export default function App() {
   return (
     <div
       className={
-        "app" + (collapsed ? " collapsed" : "") + (empty ? " is-empty" : "")
+        "app" +
+        (collapsed ? " collapsed" : "") +
+        (empty ? " is-empty" : "") +
+        (source ? " source-open" : "")
       }
     >
       <Sidebar
@@ -183,12 +189,13 @@ export default function App() {
           <div className="thread-scroll" ref={scrollRef}>
             <div className="thread">
               {turns.map((turn) => (
-                <Message key={turn.id} turn={turn} />
+                <Message key={turn.id} turn={turn} onOpenSource={setSource} />
               ))}
             </div>
           </div>
         </div>
         <Composer onSend={send} onStop={stop} busy={busy} />
+        <SourceDrawer item={source} onClose={() => setSource(null)} />
       </main>
     </div>
   );
